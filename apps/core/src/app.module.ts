@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 
-import { CollateralModule } from './collateral/collateral.module.js';
+import { InstrumentModule } from './instrument/instrument.module.js';
 import { OracleGatewayModule } from './oracle-gateway/oracle-gateway.module.js';
 
-@Module({ imports: [OracleGatewayModule, CollateralModule] })
+@Module({ imports: [OracleGatewayModule, InstrumentModule] })
 export class AppModule {}
