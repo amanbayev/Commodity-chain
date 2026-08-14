@@ -1,0 +1,2012 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+
+info:
+  title: Commodity Chain API
+  version: 0.1.0
+  description: |
+    Contract-first API for the Commodity Chain regulated tokenized commodity exchange.
+    Monetary amounts and commodity quantities are decimal integer strings expressed in
+    the minor units identified by their accompanying currency or unit fields.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+
+servers:
+  - url: /v1
+    description: Version 1 API base path
+
+tags:
+  - name: Instruments
+    description: Token passport, listing, collateralization, and issuance lifecycle.
+  - name: Collateral
+    description: Reservation of assets backing tokenized claims.
+  - name: Oracles
+    description: Signed facts received from approved external sources.
+  - name: Orders
+    description: Order entry, cancellation, and market-data views.
+  - name: Redemptions
+    description: Redemption of tokenized claims.
+  - name: Income
+    description: Income events attributable to token holders.
+  - name: Audit
+    description: Read-only regulatory and operational audit trail.
+
+security:
+  - OAuth2: []
+
+paths:
+  /instruments/drafts:
+    post:
+      tags:
+        - Instruments
+      summary: Create a draft token passport
+      description: Creates a new versioned instrument passport in DRAFT status.
+      operationId: createInstrumentDraft
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstrumentDraftCreate'
+      responses:
+        '201':
+          description: Draft instrument created.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Instrument'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /instruments/{id}/submit:
+    post:
+      tags:
+        - Instruments
+      summary: Submit an instrument for listing review
+      description: Moves a versioned draft passport into the regulated listing review workflow.
+      operationId: submitInstrumentForListing
+      parameters:
+        - $ref: '#/components/parameters/InstrumentIdPath'
+        - $ref: '#/components/parameters/XCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstrumentSubmitRequest'
+      responses:
+        '202':
+          description: Instrument accepted for listing review.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Instrument'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /instruments/{id}/passport:
+    get:
+      tags:
+        - Instruments
+      summary: Get the public token passport
+      description: Returns the approved public passport and its disclosed collateral state.
+      operationId: getInstrumentPassport
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/InstrumentIdPath'
+        - $ref: '#/components/parameters/XCorrelationId'
+      responses:
+        '200':
+          description: Public instrument passport.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstrumentPassport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /assets/{id}/reserve:
+    post:
+      tags:
+        - Collateral
+      summary: Request collateral reservation
+      description: Requests reservation of an asset quantity for a specific instrument.
+      operationId: reserveAssetCollateral
+      parameters:
+        - $ref: '#/components/parameters/AssetIdPath'
+        - $ref: '#/components/parameters/XCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollateralReserveRequest'
+      responses:
+        '202':
+          description: Reservation request accepted.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollateralPosition'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /oracle-events:
+    post:
+      tags:
+        - Oracles
+      summary: Accept a signed oracle event
+      description: |
+        Accepts an event signed by an approved oracle source. The X-Oracle-Signature
+        header and body signature are both mandatory and must authenticate the same
+        canonical event. The signed bytes are the UTF-8 encoding of the recursively
+        key-sorted, whitespace-free JSON serialization of the request body after the
+        top-level signature property has been removed. Array order is preserved.
+        Ed25519 signatures use unpadded base64url, and X-Oracle-Signature must equal
+        signature.value. Repeating an Idempotency-Key or the same sourceId/eventId
+        returns the original HTTP status and result without another domain effect.
+      operationId: acceptOracleEvent
+      security:
+        - OAuth2:
+            - oracle:write
+          OracleSourceSignature: []
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OracleEventEnvelope'
+      responses:
+        '202':
+          description: |
+            Oracle event applied, quarantined pending a missing nonce, or an original
+            acceptance result replayed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OracleEventReceipt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /instruments/{id}/mint:
+    post:
+      tags:
+        - Instruments
+      summary: Mint instrument tokens
+      description: |
+        Mints tokens only when the instrument is COLLATERALIZED or ACTIVE and the
+        resulting circulating supply remains within both the supply cap and collateral
+        confirmed by APPLIED oracle events. The supplied collateral proof is checked
+        for consistency but cannot increase verified collateral. The ledger posting,
+        circulating-supply update, audit event, and outbox event commit atomically.
+        Repeating an Idempotency-Key returns the original status and response.
+      operationId: mintInstrumentTokens
+      parameters:
+        - $ref: '#/components/parameters/InstrumentIdPath'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MintRequest'
+      responses:
+        '201':
+          description: Tokens minted or the original mint result replayed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MintResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /orders:
+    post:
+      tags:
+        - Orders
+      summary: Create an order
+      description: |
+        Creates an order for the matching sequencer. MARKET is reserved for future use.
+        Repeating an Idempotency-Key returns the original response.
+      operationId: createOrder
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+      responses:
+        '201':
+          description: Order created or the original order result replayed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /orders/{id}:
+    delete:
+      tags:
+        - Orders
+      summary: Cancel the open remainder of an order
+      description: Requests cancellation of the currently open, unfilled order quantity.
+      operationId: cancelOrder
+      parameters:
+        - $ref: '#/components/parameters/OrderIdPath'
+        - $ref: '#/components/parameters/XCorrelationId'
+      responses:
+        '200':
+          description: Current order state after cancellation processing.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /orderbook/{instrumentId}:
+    get:
+      tags:
+        - Orders
+      summary: Get an order-book snapshot
+      description: Returns aggregated price levels for an instrument at a sequencer position.
+      operationId: getOrderBook
+      parameters:
+        - $ref: '#/components/parameters/InstrumentIdNamedPath'
+        - $ref: '#/components/parameters/XCorrelationId'
+      responses:
+        '200':
+          description: Current order-book snapshot.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderBook'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /redemptions:
+    post:
+      tags:
+        - Redemptions
+      summary: Create a redemption order
+      description: |
+        Requests redemption of a tokenized claim. Repeating an Idempotency-Key returns
+        the original response.
+      operationId: createRedemption
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedemptionCreateRequest'
+      responses:
+        '202':
+          description: Redemption accepted or the original acceptance result replayed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RedemptionOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /income-events:
+    post:
+      tags:
+        - Income
+      summary: Create an income event
+      description: |
+        Records evidenced income attributable to an instrument. Repeating an
+        Idempotency-Key returns the original response.
+      operationId: createIncomeEvent
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncomeEventCreateRequest'
+      responses:
+        '202':
+          description: Income event accepted or the original acceptance result replayed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomeEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /audit/events:
+    get:
+      tags:
+        - Audit
+      summary: List audit events
+      description: Returns a cursor-paginated, read-only audit trail using optional filters.
+      operationId: listAuditEvents
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/AuditEventType'
+        - $ref: '#/components/parameters/AggregateType'
+        - $ref: '#/components/parameters/AggregateId'
+        - $ref: '#/components/parameters/ActorId'
+        - $ref: '#/components/parameters/OccurredFrom'
+        - $ref: '#/components/parameters/OccurredTo'
+      responses:
+        '200':
+          description: Cursor-paginated audit events.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEventPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: OAuth 2.0/OIDC bearer access token issued by the configured identity provider.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://identity.commodity-chain.local/realms/commodity-chain/protocol/openid-connect/auth
+          tokenUrl: https://identity.commodity-chain.local/realms/commodity-chain/protocol/openid-connect/token
+          scopes:
+            oracle:write: Submit signed oracle events.
+    OracleSourceSignature:
+      type: apiKey
+      in: header
+      name: X-Oracle-Signature
+      description: |
+        Unpadded base64url Ed25519 signature over the canonical oracle event request.
+        It must identify an approved source and exactly match signature.value in
+        OracleEventEnvelope. Canonicalization recursively sorts object keys, preserves
+        array order, emits no insignificant whitespace, and omits the top-level
+        signature property before UTF-8 encoding.
+
+  parameters:
+    XCorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: true
+      description: Caller-supplied correlation identifier propagated to every response and event.
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Stable key for this command. Reusing the key with the same canonical request
+        returns the original status and body without creating another effect. Reusing
+        it with a different request returns IDEMPOTENCY_KEY_REUSED.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: ^[A-Za-z0-9._:-]+$
+    InstrumentIdPath:
+      name: id
+      in: path
+      required: true
+      description: Instrument identifier.
+      schema:
+        $ref: '#/components/schemas/InstrumentId'
+    InstrumentIdNamedPath:
+      name: instrumentId
+      in: path
+      required: true
+      description: Instrument identifier.
+      schema:
+        $ref: '#/components/schemas/InstrumentId'
+    AssetIdPath:
+      name: id
+      in: path
+      required: true
+      description: Asset identifier.
+      schema:
+        $ref: '#/components/schemas/AssetId'
+    OrderIdPath:
+      name: id
+      in: path
+      required: true
+      description: Order identifier.
+      schema:
+        $ref: '#/components/schemas/OrderId'
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor returned by the previous page.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 512
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of audit events to return.
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 200
+        default: 50
+    AuditEventType:
+      name: eventType
+      in: query
+      required: false
+      description: Exact audit event type filter.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    AggregateType:
+      name: aggregateType
+      in: query
+      required: false
+      description: Exact aggregate type filter.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    AggregateId:
+      name: aggregateId
+      in: query
+      required: false
+      description: Exact aggregate identifier filter.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    ActorId:
+      name: actorId
+      in: query
+      required: false
+      description: Exact actor identifier filter.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    OccurredFrom:
+      name: from
+      in: query
+      required: false
+      description: Inclusive lower event-time boundary.
+      schema:
+        type: string
+        format: date-time
+    OccurredTo:
+      name: to
+      in: query
+      required: false
+      description: Exclusive upper event-time boundary.
+      schema:
+        type: string
+        format: date-time
+
+  headers:
+    XCorrelationId:
+      required: true
+      description: Correlation identifier received with the request.
+      schema:
+        type: string
+        format: uuid
+    IdempotencyReplayed:
+      required: true
+      description: True when this is the stored response of an earlier request.
+      schema:
+        type: boolean
+
+  responses:
+    BadRequest:
+      description: Request syntax, parameter, or schema validation failed.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication is required or the bearer token is invalid.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: The authenticated subject is not permitted to perform this operation.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: The requested resource does not exist or is not visible to the subject.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: The command conflicts with current state or an idempotency key payload.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnprocessableEntity:
+      description: The request is syntactically valid but violates a domain invariant.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalServerError:
+      description: An unexpected internal error occurred.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/XCorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    NonNegativeIntegerString:
+      type: string
+      pattern: ^(0|[1-9][0-9]*)$
+      description: Non-negative decimal integer string in the applicable minor units.
+    PositiveIntegerString:
+      type: string
+      pattern: ^[1-9][0-9]*$
+      description: Positive decimal integer string in the applicable minor units.
+    CurrencyCode:
+      type: string
+      pattern: ^[A-Z]{3}$
+      description: ISO 4217 alphabetic currency code identifying the monetary minor units.
+    UnitCode:
+      type: string
+      minLength: 1
+      maxLength: 32
+      pattern: ^[A-Z][A-Z0-9_]*$
+      description: Controlled unit code identifying the minor units used for commodity quantities.
+    Extensions:
+      type: object
+      description: Explicit namespace for backward-compatible, contract-governed extensions.
+      additionalProperties: true
+    InstrumentId:
+      type: string
+      format: uuid
+      description: Internal instrument identifier.
+    AssetId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+      description: Internal or registry-qualified asset identifier.
+    OrderId:
+      type: string
+      format: uuid
+      description: Internal order identifier.
+    ExternalId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+      description: Identifier assigned by an approved external system.
+    Hash:
+      type: string
+      minLength: 16
+      maxLength: 256
+      description: Algorithm-qualified or otherwise unambiguous cryptographic digest.
+
+    Signature:
+      type: object
+      additionalProperties: false
+      required:
+        - algorithm
+        - keyId
+        - value
+      properties:
+        algorithm:
+          type: string
+          minLength: 1
+          maxLength: 64
+        keyId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        value:
+          type: string
+          minLength: 16
+          maxLength: 8192
+          description: Encoded detached or enveloped digital signature.
+
+    OracleEd25519Signature:
+      allOf:
+        - $ref: '#/components/schemas/Signature'
+        - type: object
+          properties:
+            algorithm:
+              const: Ed25519
+            value:
+              type: string
+              pattern: ^[A-Za-z0-9_-]+$
+              description: Unpadded base64url Ed25519 signature bytes.
+
+    Proof:
+      type: object
+      additionalProperties: false
+      required:
+        - proofType
+        - evidenceHash
+        - issuedAt
+      properties:
+        proofType:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[A-Z][A-Z0-9_]*$
+        issuerId:
+          $ref: '#/components/schemas/ExternalId'
+        evidenceHash:
+          $ref: '#/components/schemas/Hash'
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        signature:
+          $ref: '#/components/schemas/Signature'
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    VerifierProof:
+      type: object
+      additionalProperties: false
+      required:
+        - verifierId
+        - proofType
+        - evidenceHash
+        - verifiedAt
+        - signature
+      properties:
+        verifierId:
+          $ref: '#/components/schemas/ExternalId'
+        proofType:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[A-Z][A-Z0-9_]*$
+        evidenceHash:
+          $ref: '#/components/schemas/Hash'
+        verifiedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        signature:
+          $ref: '#/components/schemas/Signature'
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    InstrumentType:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: ^[A-Z][A-Z0-9_]*$
+      description: Versioned instrument type code from the controlled instrument registry.
+    InstrumentLegalNature:
+      type: string
+      enum:
+        - CLAIM_RIGHT
+        - OWNERSHIP
+        - INCOME_SHARE
+        - LICENSE
+        - ACCESS
+        - DIGITAL_GOOD
+        - INVESTMENT
+    InstrumentStatus:
+      type: string
+      enum:
+        - DRAFT
+        - UNDER_REVIEW
+        - APPROVED
+        - COLLATERALIZED
+        - PRIMARY
+        - ACTIVE
+        - SUSPENDED
+        - REDEMPTION
+        - MATURED
+        - CLOSED
+        - DEFAULT
+    Instrument:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - type
+        - legalNature
+        - status
+        - currency
+        - unit
+        - unitPerToken
+        - supplyCap
+        - circulatingSupply
+        - version
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: '#/components/schemas/InstrumentId'
+        type:
+          $ref: '#/components/schemas/InstrumentType'
+        legalNature:
+          $ref: '#/components/schemas/InstrumentLegalNature'
+        status:
+          $ref: '#/components/schemas/InstrumentStatus'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        unitPerToken:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Commodity quantity per token as an integer string in the unit minor units.
+        supplyCap:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Maximum token supply as an integer string in indivisible token minor units.
+        circulatingSupply:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Tokens currently in circulation as an integer string in token minor units.
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    InstrumentDraftCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - legalNature
+        - currency
+        - unit
+        - unitPerToken
+        - supplyCap
+      properties:
+        type:
+          $ref: '#/components/schemas/InstrumentType'
+        legalNature:
+          $ref: '#/components/schemas/InstrumentLegalNature'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        unitPerToken:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Commodity quantity per token as an integer string in the unit minor units.
+        supplyCap:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Maximum token supply as an integer string in indivisible token minor units.
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    InstrumentSubmitRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Passport version being submitted to prevent stale updates.
+        submissionNote:
+          type: string
+          maxLength: 2000
+
+    InstrumentPassport:
+      type: object
+      additionalProperties: false
+      required:
+        - instrument
+        - assets
+        - collateralPositions
+        - publishedAt
+      properties:
+        instrument:
+          $ref: '#/components/schemas/Instrument'
+        assets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
+        collateralPositions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollateralPosition'
+        publishedAt:
+          type: string
+          format: date-time
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    EncumbranceStatus:
+      type: string
+      enum:
+        - FREE
+        - RESERVED
+        - PLEDGED
+        - LOCKED
+        - RELEASE_PENDING
+        - RELEASED
+        - UNKNOWN
+    Asset:
+      type: object
+      additionalProperties: false
+      required:
+        - assetId
+        - class
+        - owner
+        - quantity
+        - unit
+        - location
+        - encumbranceStatus
+      properties:
+        assetId:
+          $ref: '#/components/schemas/AssetId'
+        class:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[A-Z][A-Z0-9_]*$
+        owner:
+          type: string
+          minLength: 1
+          maxLength: 128
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Asset quantity as an integer string in the unit minor units.
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        location:
+          type: string
+          minLength: 1
+          maxLength: 512
+        encumbranceStatus:
+          $ref: '#/components/schemas/EncumbranceStatus'
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    CollateralPosition:
+      type: object
+      additionalProperties: false
+      required:
+        - assetId
+        - instrumentId
+        - reserved
+        - available
+        - unit
+        - verifierProofs
+        - updatedAt
+      properties:
+        assetId:
+          $ref: '#/components/schemas/AssetId'
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        reserved:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Reserved collateral quantity as an integer string in the unit minor units.
+        available:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Available collateral quantity as an integer string in the unit minor units.
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        verifierProofs:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerifierProof'
+        updatedAt:
+          type: string
+          format: date-time
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    CollateralReserveRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - instrumentId
+        - quantity
+        - unit
+      properties:
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Quantity to reserve as an integer string in the unit minor units.
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    CollateralProof:
+      type: object
+      additionalProperties: false
+      required:
+        - assetId
+        - instrumentId
+        - reserved
+        - unit
+        - evidenceHash
+        - verifierProofs
+      properties:
+        assetId:
+          $ref: '#/components/schemas/AssetId'
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        reserved:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Proven reserved quantity as an integer string in the unit minor units.
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        evidenceHash:
+          $ref: '#/components/schemas/Hash'
+        verifierProofs:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/VerifierProof'
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    MintRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - quantity
+        - unit
+        - collateralProof
+      properties:
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Token quantity to mint as an integer string in indivisible token minor units.
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        collateralProof:
+          description: |
+            Client-supplied correlation proof. It is validated against persisted collateral
+            derived from APPLIED oracle events and is never authoritative by itself.
+          $ref: '#/components/schemas/CollateralProof'
+
+    MintResult:
+      type: object
+      additionalProperties: false
+      required:
+        - instrumentId
+        - mintedQuantity
+        - unit
+        - totalSupply
+        - status
+        - mintedAt
+      properties:
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        mintedQuantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Quantity minted by this command as an integer string in token minor units.
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        totalSupply:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Total issued supply as an integer string in token minor units.
+        status:
+          $ref: '#/components/schemas/InstrumentStatus'
+        mintedAt:
+          type: string
+          format: date-time
+
+    OracleEventType:
+      type: string
+      enum:
+        - COLLATERAL_RESERVED
+        - RECEIPT_LOCKED
+        - QUALITY_CONFIRMED
+        - STOCK_UPDATED
+        - GOODS_RELEASED
+        - REVENUE_RECEIVED
+    OracleProcessingStatus:
+      type: string
+      description: Current durable state of the oracle-event validation pipeline.
+      enum:
+        - RECEIVED
+        - SCHEMA_VALIDATED
+        - SIGNATURE_VALIDATED
+        - POLICY_VALIDATED
+        - APPLIED
+        - DUPLICATE
+        - STALE
+        - QUARANTINED
+        - REJECTED
+    OracleEventEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - schemaVersion
+        - instrumentId
+        - assetId
+        - eventType
+        - quantity
+        - unit
+        - observedAt
+        - effectiveAt
+        - sourceId
+        - evidenceHash
+        - nonce
+        - signature
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        schemaVersion:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        assetId:
+          $ref: '#/components/schemas/AssetId'
+        eventType:
+          $ref: '#/components/schemas/OracleEventType'
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Observed quantity as an integer string in the unit minor units.
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        observedAt:
+          type: string
+          format: date-time
+        effectiveAt:
+          type: string
+          format: date-time
+        sourceId:
+          $ref: '#/components/schemas/ExternalId'
+        evidenceHash:
+          $ref: '#/components/schemas/Hash'
+        nonce:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Monotonically increasing source nonce used with eventId for idempotency.
+        signature:
+          $ref: '#/components/schemas/OracleEd25519Signature'
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    OracleEventReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - acceptedAt
+        - status
+        - replayed
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        acceptedAt:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/OracleProcessingStatus'
+        replayed:
+          type: boolean
+
+    OrderSide:
+      type: string
+      enum:
+        - BUY
+        - SELL
+    OrderType:
+      type: string
+      description: MARKET is reserved for a future API revision and may currently be rejected.
+      enum:
+        - LIMIT
+        - MARKET
+    OrderStatus:
+      type: string
+      enum:
+        - NEW
+        - VALIDATING
+        - ACCEPTED
+        - OPEN
+        - PARTIALLY_FILLED
+        - FILLED
+        - REJECTED
+        - CANCEL_PENDING
+        - CANCELLED
+        - EXPIRED
+    OrderCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - clientOrderId
+        - instrumentId
+        - side
+        - type
+        - quantity
+      properties:
+        clientOrderId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        side:
+          $ref: '#/components/schemas/OrderSide'
+        type:
+          $ref: '#/components/schemas/OrderType'
+        price:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Limit price as an integer string in currency minor units per token.
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Order quantity as an integer string in indivisible token minor units.
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+      allOf:
+        - if:
+            properties:
+              type:
+                const: LIMIT
+            required:
+              - type
+          then:
+            properties:
+              price:
+                $ref: '#/components/schemas/PositiveIntegerString'
+            required:
+              - price
+
+    Order:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - clientOrderId
+        - instrumentId
+        - side
+        - type
+        - quantity
+        - openQuantity
+        - status
+        - trades
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: '#/components/schemas/OrderId'
+        clientOrderId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        side:
+          $ref: '#/components/schemas/OrderSide'
+        type:
+          $ref: '#/components/schemas/OrderType'
+        price:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Limit price as an integer string in currency minor units per token.
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Original order quantity as an integer string in token minor units.
+        openQuantity:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Unfilled order quantity as an integer string in token minor units.
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        trades:
+          type: array
+          items:
+            $ref: '#/components/schemas/Trade'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        acceptedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+      allOf:
+        - if:
+            properties:
+              type:
+                const: LIMIT
+            required:
+              - type
+          then:
+            properties:
+              price:
+                $ref: '#/components/schemas/PositiveIntegerString'
+            required:
+              - price
+
+    OrderBookLevel:
+      type: object
+      additionalProperties: false
+      required:
+        - price
+        - quantity
+        - orderCount
+      properties:
+        price:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Aggregated price level as an integer string in currency minor units per token.
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Aggregate open quantity as an integer string in token minor units.
+        orderCount:
+          type: integer
+          format: int32
+          minimum: 1
+
+    OrderBook:
+      type: object
+      additionalProperties: false
+      required:
+        - instrumentId
+        - sequence
+        - snapshotAt
+        - bids
+        - asks
+      properties:
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        sequence:
+          type: string
+          pattern: ^(0|[1-9][0-9]*)$
+          description: Monotonic sequencer position serialized as a decimal integer string.
+        snapshotAt:
+          type: string
+          format: date-time
+        bids:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderBookLevel'
+        asks:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderBookLevel'
+
+    CashLeg:
+      type: object
+      additionalProperties: false
+      required:
+        - currency
+        - amount
+        - payer
+        - payee
+      properties:
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        amount:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Cash amount as an integer string in currency minor units.
+        payer:
+          type: string
+          minLength: 1
+          maxLength: 128
+        payee:
+          type: string
+          minLength: 1
+          maxLength: 128
+
+    TokenLeg:
+      type: object
+      additionalProperties: false
+      required:
+        - instrumentId
+        - quantity
+        - unit
+        - from
+        - to
+      properties:
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Token quantity as an integer string in indivisible token minor units.
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        from:
+          type: string
+          minLength: 1
+          maxLength: 128
+        to:
+          type: string
+          minLength: 1
+          maxLength: 128
+
+    Fee:
+      type: object
+      additionalProperties: false
+      required:
+        - feeType
+        - currency
+        - amount
+      properties:
+        feeType:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[A-Z][A-Z0-9_]*$
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        amount:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Fee amount as an integer string in currency minor units.
+        recipient:
+          type: string
+          minLength: 1
+          maxLength: 128
+
+    FinalityStatus:
+      type: string
+      enum:
+        - CREATED
+        - FUNDED
+        - SUBMITTED
+        - TECHNICALLY_CONFIRMED
+        - LEGALLY_FINAL
+        - RECONCILED
+        - PENDING_RECONCILIATION
+        - FAILED_BEFORE_FINALITY
+        - MANUAL_REPAIR
+
+    Settlement:
+      type: object
+      additionalProperties: false
+      required:
+        - tradeId
+        - cashLeg
+        - tokenLeg
+        - fees
+        - finalityStatus
+        - updatedAt
+      properties:
+        tradeId:
+          type: string
+          format: uuid
+        cashLeg:
+          $ref: '#/components/schemas/CashLeg'
+        tokenLeg:
+          $ref: '#/components/schemas/TokenLeg'
+        fees:
+          type: array
+          items:
+            $ref: '#/components/schemas/Fee'
+        finalityStatus:
+          $ref: '#/components/schemas/FinalityStatus'
+        updatedAt:
+          type: string
+          format: date-time
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    Trade:
+      type: object
+      additionalProperties: false
+      required:
+        - tradeId
+        - buyOrderId
+        - sellOrderId
+        - instrumentId
+        - price
+        - quantity
+        - executedAt
+        - settlement
+      properties:
+        tradeId:
+          type: string
+          format: uuid
+        buyOrderId:
+          $ref: '#/components/schemas/OrderId'
+        sellOrderId:
+          $ref: '#/components/schemas/OrderId'
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        price:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Execution price as an integer string in currency minor units per token.
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Executed quantity as an integer string in token minor units.
+        executedAt:
+          type: string
+          format: date-time
+        settlement:
+          $ref: '#/components/schemas/Settlement'
+
+    RedemptionMethod:
+      type: string
+      enum:
+        - PHYSICAL_DELIVERY
+        - CASH
+        - DIGITAL_ACTIVATION
+    RedemptionStatus:
+      type: string
+      enum:
+        - REQUESTED
+        - VALIDATING
+        - APPROVED
+        - IN_PROGRESS
+        - FULFILLED
+        - REJECTED
+        - CANCELLED
+        - FAILED
+    RedemptionCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - holder
+        - instrumentId
+        - quantity
+        - method
+        - proofs
+      properties:
+        holder:
+          type: string
+          minLength: 1
+          maxLength: 128
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Redemption quantity as an integer string in indivisible token minor units.
+        method:
+          $ref: '#/components/schemas/RedemptionMethod'
+        proofs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Proof'
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    RedemptionOrder:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - holder
+        - instrumentId
+        - quantity
+        - method
+        - status
+        - proofs
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        holder:
+          type: string
+          minLength: 1
+          maxLength: 128
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Redemption quantity as an integer string in indivisible token minor units.
+        method:
+          $ref: '#/components/schemas/RedemptionMethod'
+        status:
+          $ref: '#/components/schemas/RedemptionStatus'
+        proofs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Proof'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    IncomeEventStatus:
+      type: string
+      enum:
+        - RECEIVED
+        - VALIDATING
+        - VALIDATED
+        - ALLOCATED
+        - DISTRIBUTED
+        - REJECTED
+    IncomeEventCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - instrumentId
+        - source
+        - currency
+        - gross
+        - deductions
+        - distributable
+        - recordDate
+        - proof
+      properties:
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        source:
+          type: string
+          minLength: 1
+          maxLength: 128
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        gross:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Gross income as an integer string in currency minor units.
+        deductions:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Total deductions as an integer string in currency minor units.
+        distributable:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Distributable income as an integer string in currency minor units.
+        recordDate:
+          type: string
+          format: date
+        proof:
+          $ref: '#/components/schemas/Proof'
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    IncomeEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - instrumentId
+        - source
+        - currency
+        - gross
+        - deductions
+        - distributable
+        - recordDate
+        - proof
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        source:
+          type: string
+          minLength: 1
+          maxLength: 128
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        gross:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Gross income as an integer string in currency minor units.
+        deductions:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Total deductions as an integer string in currency minor units.
+        distributable:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Distributable income as an integer string in currency minor units.
+        recordDate:
+          type: string
+          format: date
+        proof:
+          $ref: '#/components/schemas/Proof'
+        status:
+          $ref: '#/components/schemas/IncomeEventStatus'
+        createdAt:
+          type: string
+          format: date-time
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    AuditEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - eventId
+        - nonce
+        - eventType
+        - aggregateType
+        - aggregateId
+        - actorId
+        - correlationId
+        - occurredAt
+        - data
+      properties:
+        id:
+          type: string
+          format: uuid
+        eventId:
+          type: string
+          format: uuid
+        nonce:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Event nonce used with eventId for idempotent processing.
+        eventType:
+          type: string
+          minLength: 1
+          maxLength: 128
+        aggregateType:
+          type: string
+          minLength: 1
+          maxLength: 64
+        aggregateId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        actorId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        correlationId:
+          type: string
+          format: uuid
+        occurredAt:
+          type: string
+          format: date-time
+        data:
+          $ref: '#/components/schemas/Extensions'
+
+    CursorPageMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - limit
+        - hasMore
+      properties:
+        nextCursor:
+          type: string
+          minLength: 1
+          maxLength: 512
+        limit:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 200
+        hasMore:
+          type: boolean
+
+    AuditEventPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEvent'
+        page:
+          $ref: '#/components/schemas/CursorPageMetadata'
+
+    ErrorCode:
+      type: string
+      description: Stable, deterministic machine-readable error code.
+      enum:
+        - VALIDATION_ERROR
+        - AUTHENTICATION_REQUIRED
+        - PERMISSION_DENIED
+        - RESOURCE_NOT_FOUND
+        - CONFLICT
+        - IDEMPOTENCY_KEY_REUSED
+        - INVALID_STATUS
+        - SUPPLY_EXCEEDS_COLLATERAL
+        - SUPPLY_CAP_EXCEEDED
+        - MINT_ACCOUNT_NOT_CONFIGURED
+        - INSTRUMENT_STATE_INVALID
+        - COLLATERAL_PROOF_INVALID
+        - COLLATERAL_INSUFFICIENT
+        - ORACLE_SIGNATURE_INVALID
+        - ORACLE_SOURCE_UNKNOWN
+        - ORACLE_SOURCE_KEY_REVOKED
+        - ORACLE_NONCE_INVALID
+        - ORACLE_NONCE_GAP
+        - ORACLE_EVENT_STALE
+        - ORDER_TYPE_NOT_AVAILABLE
+        - ORDER_REJECTED
+        - ORDER_NOT_CANCELLABLE
+        - REDEMPTION_NOT_ALLOWED
+        - INCOME_PROOF_INVALID
+        - RATE_LIMITED
+        - INTERNAL_ERROR
+
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        field:
+          type: string
+          minLength: 1
+          maxLength: 256
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        metadata:
+          $ref: '#/components/schemas/Extensions'
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - correlationId
+        - details
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        correlationId:
+          type: string
+          format: uuid
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
