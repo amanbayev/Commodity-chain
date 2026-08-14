@@ -45,6 +45,7 @@ paths:
       operationId: createInstrumentDraft
       parameters:
         - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
       requestBody:
         required: true
         content:
@@ -60,7 +61,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Instrument'
+                $ref: '#/components/schemas/InstrumentDraft'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -84,6 +85,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/InstrumentIdPath'
         - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
       requestBody:
         required: true
         content:
@@ -99,7 +101,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Instrument'
+                $ref: '#/components/schemas/InstrumentSubmissionResult'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -551,6 +553,15 @@ components:
       schema:
         type: string
         format: uuid
+    XActorId:
+      name: X-Actor-Id
+      in: header
+      required: true
+      description: Authenticated actor identifier recorded in the immutable audit trail.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -978,6 +989,7 @@ components:
         - unit
         - unitPerToken
         - supplyCap
+        - passport
       properties:
         type:
           $ref: '#/components/schemas/InstrumentType'
@@ -995,8 +1007,251 @@ components:
           allOf:
             - $ref: '#/components/schemas/PositiveIntegerString'
           description: Maximum token supply as an integer string in indivisible token minor units.
+        passport:
+          $ref: '#/components/schemas/TokenPassportDraft'
         extensions:
           $ref: '#/components/schemas/Extensions'
+
+    UnderlyingAssetPassport:
+      type: object
+      additionalProperties: false
+      required:
+        - assetClass
+        - commodity
+        - grade
+        - originCountry
+        - unit
+        - storageLocation
+      properties:
+        assetClass:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[A-Z][A-Z0-9_]*$
+        commodity:
+          type: string
+          minLength: 1
+          maxLength: 128
+        grade:
+          type: string
+          minLength: 1
+          maxLength: 128
+        originCountry:
+          type: string
+          pattern: ^[A-Z]{2}$
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        storageLocation:
+          type: string
+          minLength: 1
+          maxLength: 512
+        qualityStandard:
+          type: string
+          minLength: 1
+          maxLength: 256
+
+    HolderRightsPassport:
+      type: object
+      additionalProperties: false
+      required:
+        - legalTitle
+        - claimDescription
+        - governingLaw
+        - redemptionMethods
+        - transferRestrictions
+      properties:
+        legalTitle:
+          $ref: '#/components/schemas/InstrumentLegalNature'
+        claimDescription:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        governingLaw:
+          type: string
+          minLength: 1
+          maxLength: 256
+        redemptionMethods:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - PHYSICAL_DELIVERY
+              - CASH
+              - DIGITAL_ACTIVATION
+        transferRestrictions:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1000
+
+    CustodyAndVerificationPassport:
+      type: object
+      additionalProperties: false
+      required:
+        - custodianId
+        - registryId
+        - verifierIds
+      properties:
+        custodianId:
+          $ref: '#/components/schemas/ExternalId'
+        registryId:
+          $ref: '#/components/schemas/ExternalId'
+        verifierIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/ExternalId'
+        evidenceRequirements:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1000
+
+    PassportFee:
+      type: object
+      additionalProperties: false
+      required:
+        - feeType
+        - amount
+        - currency
+      properties:
+        feeType:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[A-Z][A-Z0-9_]*$
+        amount:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Fee amount as an integer string in currency minor units.
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+
+    InstrumentEconomicsPassport:
+      type: object
+      additionalProperties: false
+      required:
+        - issuePrice
+        - issueCurrency
+        - maturityDate
+        - feeSchedule
+      properties:
+        issuePrice:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Issue price as an integer string in currency minor units per token.
+        issueCurrency:
+          $ref: '#/components/schemas/CurrencyCode'
+        maturityDate:
+          type: string
+          format: date
+        feeSchedule:
+          type: array
+          items:
+            $ref: '#/components/schemas/PassportFee'
+
+    TradingParametersPassport:
+      type: object
+      additionalProperties: false
+      required:
+        - tickSize
+        - lotSize
+        - minimumOrderQuantity
+        - settlementCycle
+      properties:
+        tickSize:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Price tick as an integer string in currency minor units per token.
+        lotSize:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Tradable lot as an integer string in token minor units.
+        minimumOrderQuantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Minimum order quantity as an integer string in token minor units.
+        settlementCycle:
+          type: string
+          enum:
+            - T_PLUS_0
+            - T_PLUS_1
+            - T_PLUS_2
+
+    TokenPassportDraft:
+      type: object
+      additionalProperties: false
+      description: Draft passport; sections may be omitted until listing submission.
+      properties:
+        underlyingAsset:
+          $ref: '#/components/schemas/UnderlyingAssetPassport'
+        holderRights:
+          $ref: '#/components/schemas/HolderRightsPassport'
+        custodyAndVerification:
+          $ref: '#/components/schemas/CustodyAndVerificationPassport'
+        economics:
+          $ref: '#/components/schemas/InstrumentEconomicsPassport'
+        tradingParameters:
+          $ref: '#/components/schemas/TradingParametersPassport'
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    TokenPassportContent:
+      allOf:
+        - $ref: '#/components/schemas/TokenPassportDraft'
+        - type: object
+          required:
+            - underlyingAsset
+            - holderRights
+            - custodyAndVerification
+            - economics
+            - tradingParameters
+
+    InstrumentDraft:
+      type: object
+      additionalProperties: false
+      required:
+        - instrument
+        - passport
+        - version
+      properties:
+        instrument:
+          $ref: '#/components/schemas/Instrument'
+        passport:
+          $ref: '#/components/schemas/TokenPassportDraft'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+
+    InstrumentSubmissionResult:
+      type: object
+      additionalProperties: false
+      required:
+        - instrument
+        - passport
+        - passportHash
+        - version
+        - submittedAt
+      properties:
+        instrument:
+          $ref: '#/components/schemas/Instrument'
+        passport:
+          $ref: '#/components/schemas/TokenPassportContent'
+        passportHash:
+          $ref: '#/components/schemas/Hash'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        submittedAt:
+          type: string
+          format: date-time
 
     InstrumentSubmitRequest:
       type: object
@@ -1018,12 +1273,23 @@ components:
       additionalProperties: false
       required:
         - instrument
+        - passport
+        - passportHash
+        - version
         - assets
         - collateralPositions
         - publishedAt
       properties:
         instrument:
           $ref: '#/components/schemas/Instrument'
+        passport:
+          $ref: '#/components/schemas/TokenPassportContent'
+        passportHash:
+          $ref: '#/components/schemas/Hash'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
         assets:
           type: array
           items:
@@ -1951,6 +2217,10 @@ components:
         - CONFLICT
         - IDEMPOTENCY_KEY_REUSED
         - INVALID_STATUS
+        - INVALID_TRANSITION
+        - PASSPORT_INCOMPLETE
+        - FOUR_EYES_REQUIRED
+        - PASSPORT_NOT_PUBLIC
         - SUPPLY_EXCEEDS_COLLATERAL
         - SUPPLY_CAP_EXCEEDED
         - MINT_ACCOUNT_NOT_CONFIGURED

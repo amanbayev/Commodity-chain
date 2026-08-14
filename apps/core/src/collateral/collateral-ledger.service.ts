@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 
 import { CollateralError } from './collateral.errors.js';
@@ -447,9 +449,34 @@ export class PostgresCollateralLedger implements CollateralLedger {
     oracleEvent: OracleEventRow,
     position: CollateralPosition,
   ): Promise<void> {
+    const nonceResult = await client.query<{ nonce: string } & QueryResultRow>(
+      `SELECT nextval(pg_get_serial_sequence('event_log', 'id'))::text AS nonce`,
+    );
+    const nonce = nonceResult.rows[0]?.nonce;
+    if (nonce === undefined) throw new Error('Could not allocate collateral event nonce');
+    const eventId = randomUUID();
+    const eventType = movementType === 'RESERVE' ? 'COLLATERAL_RESERVED' : 'COLLATERAL_RELEASED';
+    const envelope = {
+      eventId,
+      nonce,
+      schemaVersion: '1',
+      eventType,
+      occurredAt: position.updatedAt,
+      instrumentId,
+      assetId,
+      quantity: quantity.toString(),
+      unit: position.unit,
+      oracleEventId: oracleEvent.event_id,
+      sourceId: oracleEvent.source_id,
+      reserved: position.reserved.toString(),
+      available: position.available.toString(),
+      correlationId: oracleEvent.correlation_id,
+    };
     await client.query(
       `
         INSERT INTO event_log (
+          id,
+          occurred_at,
           actor,
           event_type,
           aggregate_type,
@@ -457,25 +484,24 @@ export class PostgresCollateralLedger implements CollateralLedger {
           correlation_id,
           payload
         )
-        VALUES ($1, $2, 'COLLATERAL_POSITION', $3, $4, $5::jsonb)
+        VALUES ($1, $2, $3, $4, 'COLLATERAL_POSITION', $5, $6, $7::jsonb)
       `,
       [
+        nonce,
+        position.updatedAt,
         `oracle:${oracleEvent.source_id}`,
-        movementType === 'RESERVE' ? 'COLLATERAL_RESERVED' : 'COLLATERAL_RELEASED',
+        eventType,
         `${assetId}:${instrumentId}`,
         oracleEvent.correlation_id,
-        JSON.stringify({
-          oracleEventId: oracleEvent.event_id,
-          assetId,
-          instrumentId,
-          movementType,
-          quantity: quantity.toString(),
-          reserved: position.reserved.toString(),
-          available: position.available.toString(),
-          unit: position.unit,
-        }),
+        JSON.stringify(envelope),
       ],
     );
+    await client.query('INSERT INTO outbox (topic, payload) VALUES ($1, $2::jsonb)', [
+      movementType === 'RESERVE'
+        ? 'domain.collateral.reserved.v1'
+        : 'domain.collateral.released.v1',
+      JSON.stringify(envelope),
+    ]);
   }
 }
 
