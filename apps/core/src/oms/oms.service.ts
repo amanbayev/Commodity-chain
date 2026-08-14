@@ -18,6 +18,7 @@ import {
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 
 import { canonicalizeJson } from '../oracle-gateway/canonical-json.js';
+import { allocateCommission } from '../settlement/rounding.js';
 import { assertOrderAdmission } from './admission-policy.js';
 import {
   assertNumeric38,
@@ -638,8 +639,12 @@ export class OmsService {
   ): Promise<void> {
     const buy = await this.lockOrder(client, event.buyOrderId);
     const sell = await this.lockOrder(client, event.sellOrderId);
-    if (buy.price === null || buy.fee_schedule_version === null) {
-      throw new Error(`BUY order ${buy.id} does not have price or fee schedule`);
+    if (
+      buy.price === null ||
+      buy.fee_schedule_version === null ||
+      sell.fee_schedule_version === null
+    ) {
+      throw new Error(`Trade orders do not have price or fee schedule`);
     }
     const oldBuyOpen = BigInt(buy.open_quantity);
     const oldSellOpen = BigInt(sell.open_quantity);
@@ -648,19 +653,32 @@ export class OmsService {
     if (newBuyOpen < 0n || newSellOpen < 0n)
       throw new Error('Trade exceeds persisted open quantity');
 
-    const fee = await this.loadFixedFee(client, buy.instrument_id, buy.fee_schedule_version);
-    const rates = feeRates(fee);
+    const buyFeeSchedule = await this.loadFixedFee(
+      client,
+      buy.instrument_id,
+      buy.fee_schedule_version,
+    );
+    const sellFeeSchedule = await this.loadFixedFee(
+      client,
+      sell.instrument_id,
+      sell.fee_schedule_version,
+    );
+    const rates = feeRates(buyFeeSchedule);
     const targetBuyReserve = calculateRemainingBuyReservation(newBuyOpen, BigInt(buy.price), rates);
     const buyReserveBefore = BigInt(buy.reserved_remaining);
     const buyReduction = buyReserveBefore - targetBuyReserve;
     const notional = assertNumeric38(event.price * event.quantity, 'tradeNotional');
-    const worstRate =
-      rates.makerRatePpm > rates.takerRatePpm ? rates.makerRatePpm : rates.takerRatePpm;
     const executedNotional = assertNumeric38(
       BigInt(buy.executed_notional) + notional,
       'executedNotional',
     );
-    const cumulativeFee = calculateFee(executedNotional, worstRate);
+    const priorRoleNotional = await this.loadExecutedNotionalByRole(client, buy.id);
+    const currentBuyerIsMaker = event.makerOrderId === buy.id;
+    const makerNotional = priorRoleNotional.maker + (currentBuyerIsMaker ? notional : 0n);
+    const takerNotional = priorRoleNotional.taker + (currentBuyerIsMaker ? 0n : notional);
+    const cumulativeFee =
+      calculateFee(makerNotional, rates.makerRatePpm) +
+      calculateFee(takerNotional, rates.takerRatePpm);
     const feeDue = cumulativeFee - BigInt(buy.charged_fee);
     const maximumFeeThisFill = buyReduction - notional;
     const actualFee = feeDue < maximumFeeThisFill ? feeDue : maximumFeeThisFill;
@@ -668,6 +686,15 @@ export class OmsService {
     if (buyReduction < 0n || feeDue < 0n || maximumFeeThisFill < 0n) {
       throw new Error(`BUY order ${buy.id} reserve allocation is inconsistent`);
     }
+    const buyerRate = currentBuyerIsMaker ? rates.makerRatePpm : rates.takerRatePpm;
+    const sellerRates = feeRates(sellFeeSchedule);
+    const sellerRate =
+      event.makerOrderId === sell.id ? sellerRates.makerRatePpm : sellerRates.takerRatePpm;
+    const buyerAllocation = allocateCommission(notional, buyerRate);
+    const sellerAllocation = allocateCommission(notional, sellerRate);
+    const buyerResidual =
+      buyerAllocation.residual > actualFee ? actualFee : buyerAllocation.residual;
+    const buyerExchangeFee = actualFee - buyerResidual;
 
     const buyerAccounts = await this.requireAccountPairByOrder(client, buy);
     const sellerAccounts = await this.requireAccountPairByOrder(client, sell);
@@ -738,13 +765,19 @@ export class OmsService {
       [event.instrumentId],
     );
     const instrumentRow = requireRow(instrument.rows[0], 'Trade instrument was not found');
+    const settlementEventId = deterministicUuid(`settlement:created:${event.tradeId}`);
     await client.query(
       `
         INSERT INTO settlements (
           trade_id, cash_currency, cash_amount, cash_payer_party_id,
           cash_payee_party_id, token_instrument_id, token_quantity,
-          token_from_party_id, token_to_party_id, finality_status, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $5, $4, 'CREATED', $8)
+          token_from_party_id, token_to_party_id, finality_status, updated_at,
+          source_event_id, source_event_nonce, buyer_fee_amount,
+          seller_fee_amount, rounding_residual
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $5, $4, 'CREATED', $8,
+          $9, $10, $11, $12, $13
+        )
       `,
       [
         event.tradeId,
@@ -755,17 +788,71 @@ export class OmsService {
         event.instrumentId,
         event.quantity.toString(),
         event.occurredAt,
+        settlementEventId,
+        event.nonce.toString(),
+        actualFee.toString(),
+        sellerAllocation.charged.toString(),
+        (buyerResidual + sellerAllocation.residual).toString(),
       ],
     );
-    if (actualFee > 0n) {
+    const feeRows = [
+      {
+        type: 'BUYER_TRADING_FEE',
+        amount: buyerExchangeFee,
+        component: 'FEE',
+        partyId: buy.party_id,
+      },
+      {
+        type: 'BUYER_ROUNDING_RESIDUAL',
+        amount: buyerResidual,
+        component: 'RESIDUAL',
+        partyId: buy.party_id,
+      },
+      {
+        type: 'SELLER_TRADING_FEE',
+        amount: sellerAllocation.fee,
+        component: 'FEE',
+        partyId: sell.party_id,
+      },
+      {
+        type: 'SELLER_ROUNDING_RESIDUAL',
+        amount: sellerAllocation.residual,
+        component: 'RESIDUAL',
+        partyId: sell.party_id,
+      },
+    ] as const;
+    for (const row of feeRows) {
+      if (row.amount === 0n) continue;
       await client.query(
         `
-          INSERT INTO settlement_fees (settlement_id, fee_type, currency, amount)
-          VALUES ($1, 'TRADING', $2, $3)
+          INSERT INTO settlement_fees (
+            settlement_id, fee_type, currency, amount, charged_party_id, component
+          ) VALUES ($1, $2, $3, $4, $5, $6)
         `,
-        [event.tradeId, instrumentRow.currency.trim(), actualFee.toString()],
+        [
+          event.tradeId,
+          row.type,
+          instrumentRow.currency.trim(),
+          row.amount.toString(),
+          row.partyId,
+          row.component,
+        ],
       );
     }
+    await client.query(
+      `INSERT INTO outbox (topic, payload) VALUES ('domain.settlement.created.v1', $1::jsonb)`,
+      [
+        JSON.stringify({
+          eventId: settlementEventId,
+          nonce: event.nonce.toString(),
+          eventType: 'SETTLEMENT_CREATED',
+          schemaVersion: '1',
+          occurredAt: event.occurredAt,
+          tradeId: event.tradeId,
+          correlationId,
+        }),
+      ],
+    );
   }
 
   private async closeOrder(
@@ -904,6 +991,29 @@ export class OmsService {
       [instrumentId, version],
     );
     return requireRow(result.rows[0], `Fee schedule ${instrumentId}/${version} was not found`);
+  }
+
+  private async loadExecutedNotionalByRole(
+    client: PoolClient,
+    orderId: string,
+  ): Promise<{ readonly maker: bigint; readonly taker: bigint }> {
+    const result = await client.query<
+      QueryResultRow & { maker_notional: string; taker_notional: string }
+    >(
+      `SELECT
+         coalesce(sum(trade.price * trade.quantity) FILTER (
+           WHERE matching.payload ->> 'makerOrderId' = $1::uuid::text
+         ), 0)::text AS maker_notional,
+         coalesce(sum(trade.price * trade.quantity) FILTER (
+           WHERE matching.payload ->> 'takerOrderId' = $1::uuid::text
+         ), 0)::text AS taker_notional
+       FROM trades AS trade
+       JOIN matching_events AS matching ON matching.event_id = trade.matching_event_id
+       WHERE trade.buy_order_id = $1::uuid`,
+      [orderId],
+    );
+    const row = requireRow(result.rows[0], 'Prior role notional was not returned');
+    return { maker: BigInt(row.maker_notional), taker: BigInt(row.taker_notional) };
   }
 
   private async lockOrder(client: PoolClient, orderId: string): Promise<OrderRow> {

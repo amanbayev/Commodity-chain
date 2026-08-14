@@ -65,8 +65,14 @@ describeWithDatabase('OMS PostgreSQL integration', () => {
       finalityStatus: 'CREATED',
       cashLeg: { amount: '5000', payer: fixture.buyerId, payee: fixture.sellerId },
       tokenLeg: { quantity: '50', from: fixture.sellerId, to: fixture.buyerId },
-      fees: [{ feeType: 'TRADING', amount: '5' }],
     });
+    expect(buyOrder.trades[0]?.settlement.fees).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ feeType: 'SELLER_ROUNDING_RESIDUAL', amount: '1' }),
+        expect.objectContaining({ feeType: 'BUYER_TRADING_FEE', amount: '5' }),
+        expect.objectContaining({ feeType: 'SELLER_TRADING_FEE', amount: '2' }),
+      ]),
+    );
 
     expect(await count('trades')).toBe(1n);
     expect(await count('settlements')).toBe(1n);
@@ -129,10 +135,13 @@ describeWithDatabase('OMS PostgreSQL integration', () => {
     );
     expect(buy.status).toBe('FILLED');
     expect(buy.trades).toHaveLength(3);
-    const fee = await pool.query<{ total: string }>(
-      'SELECT coalesce(sum(amount), 0)::text AS total FROM settlement_fees',
+    const fee = await pool.query<{ buyer_total: string; seller_total: string }>(
+      `SELECT
+         coalesce(sum(amount) FILTER (WHERE fee_type LIKE 'BUYER%'), 0)::text AS buyer_total,
+         coalesce(sum(amount) FILTER (WHERE fee_type LIKE 'SELLER%'), 0)::text AS seller_total
+       FROM settlement_fees`,
     );
-    expect(fee.rows[0]?.total).toBe('1');
+    expect(fee.rows[0]).toEqual({ buyer_total: '1', seller_total: '3' });
     expect(await accountBalance(fixture.buyerCashReserved)).toBe(0n);
     expect(await accountBalance(fixture.clearingCashReserved)).toBe(301n);
     await assertActiveReserveInvariant(fixture.buyerId, 'BUY');

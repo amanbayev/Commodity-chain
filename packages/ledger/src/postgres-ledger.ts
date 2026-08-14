@@ -85,6 +85,10 @@ interface TrialBalanceRow extends QueryResultRow {
 
 type Queryable = Pool | PoolClient;
 
+export interface LedgerPostingHooks {
+  afterEntryInserted?(legIndex: number): void | Promise<void>;
+}
+
 const ACCOUNT_SELECT = `
   SELECT
     id,
@@ -101,7 +105,10 @@ const ACCOUNT_SELECT = `
 `;
 
 export class PostgresLedger implements TransactionalLedger {
-  public constructor(private readonly pool: Pool) {}
+  public constructor(
+    private readonly pool: Pool,
+    private readonly hooks: LedgerPostingHooks = {},
+  ) {}
 
   public openAccount(input: CashOpenAccountInput): Promise<CashLedgerAccount>;
   public openAccount(input: TokenOpenAccountInput): Promise<TokenLedgerAccount>;
@@ -491,6 +498,7 @@ export class PostgresLedger implements TransactionalLedger {
         `,
         [randomUUID(), postingId, index, leg.accountId, leg.direction, leg.amount.toString()],
       );
+      await this.hooks.afterEntryInserted?.(index);
     }
 
     for (const [accountId, balance] of resultingBalances) {
