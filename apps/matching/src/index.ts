@@ -1,3 +1,1 @@
-export * from './matching-engine.js';
-export * from './state.js';
-export * from './types.js';
+export * from '@commodity-chain/matching-core';

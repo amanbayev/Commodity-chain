@@ -11,6 +11,7 @@
   "dependencies": {
     "@commodity-chain/adapters": "workspace:*",
     "@commodity-chain/ledger": "workspace:*",
+    "@commodity-chain/matching-core": "workspace:*",
     "@nestjs/common": "11.1.28",
     "@nestjs/core": "11.1.28",
     "@nestjs/platform-express": "11.1.28",
