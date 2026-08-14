@@ -8,6 +8,9 @@ export default defineConfig({
       '@commodity-chain/ledger': fileURLToPath(
         new URL('./packages/ledger/src/index.ts', import.meta.url),
       ),
+      '@commodity-chain/matching-core': fileURLToPath(
+        new URL('./packages/matching-core/src/index.ts', import.meta.url),
+      ),
     },
   },
   test: {

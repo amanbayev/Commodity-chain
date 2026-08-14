@@ -299,10 +299,13 @@ paths:
       description: |
         Creates an order for the matching sequencer. MARKET is reserved for future use.
         Repeating an Idempotency-Key returns the original response.
+        Repeating an X-Participant-Id and clientOrderId pair also returns the original result
+        without creating another order or reserve.
       operationId: createOrder
       parameters:
         - $ref: '#/components/parameters/XCorrelationId'
         - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/XParticipantId'
       requestBody:
         required: true
         content:
@@ -339,11 +342,15 @@ paths:
       tags:
         - Orders
       summary: Cancel the open remainder of an order
-      description: Requests cancellation of the currently open, unfilled order quantity.
+      description: |
+        Requests cancellation of the currently open, unfilled order quantity. Repeating
+        cancellation of an already cancelled order returns its current state and does not
+        release the reserve again.
       operationId: cancelOrder
       parameters:
         - $ref: '#/components/parameters/OrderIdPath'
         - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XParticipantId'
       responses:
         '200':
           description: Current order state after cancellation processing.
@@ -379,6 +386,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/InstrumentIdNamedPath'
         - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/OrderBookDepth'
       responses:
         '200':
           description: Current order-book snapshot.
@@ -562,6 +570,25 @@ components:
         type: string
         minLength: 1
         maxLength: 128
+    XParticipantId:
+      name: X-Participant-Id
+      in: header
+      required: true
+      description: UUID of the authenticated trading participant on whose behalf the command runs.
+      schema:
+        type: string
+        format: uuid
+    OrderBookDepth:
+      name: depth
+      in: query
+      required: false
+      description: Maximum number of aggregated price levels returned per side.
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+        default: 20
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -1665,6 +1692,7 @@ components:
         - quantity
         - openQuantity
         - status
+        - feeScheduleVersion
         - trades
         - createdAt
         - updatedAt
@@ -1695,6 +1723,11 @@ components:
           description: Unfilled order quantity as an integer string in token minor units.
         status:
           $ref: '#/components/schemas/OrderStatus'
+        feeScheduleVersion:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Immutable fee-schedule version fixed when the order was accepted.
         trades:
           type: array
           items:
@@ -2227,6 +2260,9 @@ components:
         - INSTRUMENT_STATE_INVALID
         - COLLATERAL_PROOF_INVALID
         - COLLATERAL_INSUFFICIENT
+        - INSUFFICIENT_FUNDS
+        - PARTICIPANT_NOT_FOUND
+        - INSTRUMENT_NOT_TRADABLE
         - ORACLE_SIGNATURE_INVALID
         - ORACLE_SOURCE_UNKNOWN
         - ORACLE_SOURCE_KEY_REVOKED

@@ -8,6 +8,7 @@ import type {
   OrderSide,
   ReplayConfig,
 } from './types.js';
+import { deterministicUuid } from './deterministic-id.js';
 
 const INITIAL_TIMESTAMP = '1970-01-01T00:00:00.000Z';
 
@@ -299,7 +300,7 @@ function validateEventLog(events: readonly MatchingEvent[], instrumentId: string
 }
 
 export function eventId(instrumentId: string, nonce: bigint): string {
-  return `matching:${instrumentId}:${nonce}`;
+  return deterministicUuid(`matching:event:${instrumentId}:${nonce}`);
 }
 
 function assertReplayConfig(config: ReplayConfig): void {

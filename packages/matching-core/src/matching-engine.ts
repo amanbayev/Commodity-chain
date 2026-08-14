@@ -5,7 +5,9 @@ import {
   eventId,
   getOrderBookSnapshot,
   openOrders,
+  replay as replayState,
 } from './state.js';
+import { deterministicUuid } from './deterministic-id.js';
 import type {
   CancelCommand,
   EngineConfig,
@@ -35,11 +37,14 @@ type DraftEvent = DraftAccepted | DraftRejected | DraftTrade | DraftCancelled;
 export class MatchingEngine implements MatchingEngineApi {
   private state: MatchingState;
 
-  public constructor(private readonly config: EngineConfig) {
+  public constructor(
+    private readonly config: EngineConfig,
+    events: readonly MatchingEvent[] = [],
+  ) {
     if (typeof config.clock !== 'function') {
       throw new TypeError('clock must be a function');
     }
-    this.state = createInitialState(config);
+    this.state = events.length === 0 ? createInitialState(config) : replayState(config, events);
   }
 
   public submitCommand(command: MatchingCommand): readonly MatchingEvent[] {
@@ -145,7 +150,9 @@ export class MatchingEngine implements MatchingEngineApi {
       tradeOrdinal += 1;
       events.push({
         type: 'TradeExecuted',
-        tradeId: `trade:${this.config.instrumentId}:${sequence}:${tradeOrdinal}`,
+        tradeId: deterministicUuid(
+          `matching:trade:${this.config.instrumentId}:${sequence}:${tradeOrdinal}`,
+        ),
         instrumentId: this.config.instrumentId,
         makerOrderId: maker.orderId,
         takerOrderId: command.orderId,

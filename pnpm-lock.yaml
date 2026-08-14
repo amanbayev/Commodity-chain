@@ -50,6 +50,9 @@ importers:
       '@commodity-chain/ledger':
         specifier: workspace:*
         version: link:../../packages/ledger
+      '@commodity-chain/matching-core':
+        specifier: workspace:*
+        version: link:../../packages/matching-core
       '@nestjs/common':
         specifier: 11.1.28
         version: 11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -83,13 +86,10 @@ importers:
         version: 4.9.0
 
   apps/matching:
-    devDependencies:
-      fast-check:
-        specifier: 4.9.0
-        version: 4.9.0
-      vitest:
-        specifier: 4.1.10
-        version: 4.1.10(@types/node@22.19.1)(vite@8.2.1(@types/node@22.19.1)(yaml@2.8.2))
+    dependencies:
+      '@commodity-chain/matching-core':
+        specifier: workspace:*
+        version: link:../../packages/matching-core
 
   apps/web:
     dependencies:
@@ -137,6 +137,15 @@ importers:
       '@types/pg':
         specifier: 8.21.0
         version: 8.21.0
+      fast-check:
+        specifier: 4.9.0
+        version: 4.9.0
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@22.19.1)(vite@8.2.1(@types/node@22.19.1)(yaml@2.8.2))
+
+  packages/matching-core:
+    devDependencies:
       fast-check:
         specifier: 4.9.0
         version: 4.9.0

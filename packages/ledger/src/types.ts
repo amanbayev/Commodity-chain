@@ -151,6 +151,8 @@ export interface Ledger {
 
 export interface LedgerPostingWriter {
   post(input: PostInput): Promise<Posting>;
+  reserve(input: ReserveInput): Promise<Posting>;
+  release(input: ReserveInput): Promise<Posting>;
 }
 
 export interface TransactionalLedger extends Ledger {

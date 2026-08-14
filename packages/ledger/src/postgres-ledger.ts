@@ -156,6 +156,14 @@ export class PostgresLedger implements TransactionalLedger {
   public withinTransaction(transaction: PoolClient): LedgerPostingWriter {
     return {
       post: (input: PostInput): Promise<Posting> => this.postWithClient(transaction, input, null),
+      reserve: async (input: ReserveInput): Promise<Posting> => {
+        await this.validateMovementAccounts(input, 'AVAILABLE', 'RESERVED', transaction);
+        return this.postWithClient(transaction, movementPosting(input, 'RESERVE'), null);
+      },
+      release: async (input: ReserveInput): Promise<Posting> => {
+        await this.validateMovementAccounts(input, 'AVAILABLE', 'RESERVED', transaction);
+        return this.postWithClient(transaction, movementPosting(input, 'RELEASE'), null);
+      },
     };
   }
 
@@ -502,6 +510,7 @@ export class PostgresLedger implements TransactionalLedger {
     input: ReserveInput,
     availablePurpose: LedgerAccountPurpose,
     reservedPurpose: LedgerAccountPurpose,
+    executor: Queryable = this.pool,
   ): Promise<void> {
     assertIdempotencyKey(input.idempotencyKey);
     assertUuid(input.correlationId, 'correlationId');
@@ -513,7 +522,8 @@ export class PostgresLedger implements TransactionalLedger {
       assertMetadata(input.metadata);
     }
 
-    const result = await this.pool.query<AccountRow>(
+    const result = await query<AccountRow>(
+      executor,
       `
         ${ACCOUNT_SELECT}
         WHERE id = ANY($1::uuid[])
@@ -650,6 +660,27 @@ function validateTrialBalanceFilter(filter: TrialBalanceFilter): void {
   if (filter.instrumentId !== undefined) {
     assertUuid(filter.instrumentId, 'instrumentId');
   }
+}
+
+function movementPosting(input: ReserveInput, kind: 'RESERVE' | 'RELEASE'): PostInput {
+  const reserve = kind === 'RESERVE';
+  return {
+    idempotencyKey: input.idempotencyKey,
+    correlationId: input.correlationId,
+    legs: [
+      {
+        accountId: input.availableAccountId,
+        direction: reserve ? 'CREDIT' : 'DEBIT',
+        amount: input.amount,
+      },
+      {
+        accountId: input.reservedAccountId,
+        direction: reserve ? 'DEBIT' : 'CREDIT',
+        amount: input.amount,
+      },
+    ],
+    ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+  };
 }
 
 function denominationKey(account: AccountRow): string {

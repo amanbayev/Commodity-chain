@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { deterministicUuid } from './deterministic-id.js';
 import { MatchingEngine } from './matching-engine.js';
-import { replay } from './state.js';
+import { eventId, replay } from './state.js';
 import type { CancelCommand, EngineConfig, MatchingEvent, PlaceCommand } from './types.js';
 
 const instrumentId = 'grain-kz-2026';
@@ -23,7 +24,7 @@ describe('MatchingEngine scenarios', () => {
     expect(events).toEqual([
       {
         type: 'OrderAccepted',
-        eventId: `matching:${instrumentId}:2`,
+        eventId: eventId(instrumentId, 2n),
         nonce: 2n,
         exchangeSequenceNumber: 2n,
         eventIndex: 0,
@@ -41,14 +42,14 @@ describe('MatchingEngine scenarios', () => {
       },
       {
         type: 'TradeExecuted',
-        eventId: `matching:${instrumentId}:3`,
+        eventId: eventId(instrumentId, 3n),
         nonce: 3n,
         exchangeSequenceNumber: 2n,
         eventIndex: 1,
         eventCount: 2,
         commandId: 'command-2',
         occurredAt,
-        tradeId: `trade:${instrumentId}:2:1`,
+        tradeId: deterministicUuid(`matching:trade:${instrumentId}:2:1`),
         instrumentId,
         makerOrderId: 'order-1',
         takerOrderId: 'order-2',
@@ -180,7 +181,7 @@ describe('MatchingEngine scenarios', () => {
     const accepted = engine.getState().events[0]!;
     const expiry: MatchingEvent = {
       type: 'OrderExpired',
-      eventId: `matching:${instrumentId}:2`,
+      eventId: eventId(instrumentId, 2n),
       nonce: 2n,
       exchangeSequenceNumber: 2n,
       eventIndex: 0,
