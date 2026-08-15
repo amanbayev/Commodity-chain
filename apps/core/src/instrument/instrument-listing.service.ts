@@ -6,17 +6,23 @@ import { PostgresCollateralLedger } from '../collateral/collateral-ledger.servic
 import { InstrumentListingError } from './instrument-listing.errors.js';
 import type {
   CollateralReservedDomainEvent,
+  CollateralSummaryResult,
   CreateInstrumentDraftCommand,
   InstrumentDraftResult,
   InstrumentMarketPage,
   InstrumentSubmissionResult,
+  IssuerInstrumentPage,
+  IssuerInstrumentResult,
   InternalTransitionCommand,
   PublicPassportResult,
   ReviewCommand,
   ReviewResult,
   RevisePassportCommand,
   SubmitInstrumentCommand,
+  UpdateInstrumentDraftCommand,
 } from './instrument-listing.types.js';
+import { rowToInstrument } from './instrument-row.mapper.js';
+import type { InstrumentDatabaseRow } from './instrument-row.mapper.js';
 import {
   assertCompletePassport,
   hashPassport,
@@ -25,7 +31,7 @@ import {
   passportToJson,
   parsePassportDraft,
 } from './instrument-passport.js';
-import type { InstrumentView, LegalNature, PassportDraft } from './instrument-passport.js';
+import type { InstrumentView, PassportDraft } from './instrument-passport.js';
 import {
   InvalidInstrumentTransitionError,
   isInstrumentStatus,
@@ -38,22 +44,10 @@ const CODE_PATTERN = /^[A-Z][A-Z0-9_]*$/u;
 const CURRENCY_PATTERN = /^[A-Z]{3}$/u;
 const MAX_NUMERIC_38 = 10n ** 38n - 1n;
 
-interface InstrumentRow extends QueryResultRow {
-  id: string;
-  type: string;
-  legal_nature: LegalNature;
-  status: string;
-  currency: string;
-  unit: string;
-  unit_per_token: string;
-  supply_cap: string;
-  circulating_supply: string;
-  version: string;
+interface InstrumentRow extends InstrumentDatabaseRow {
   passport_hash: string | null;
   suspended_from_status: string | null;
-  extensions: Readonly<Record<string, unknown>>;
-  created_at: Date | string;
-  updated_at: Date | string;
+  issuer_id: string;
 }
 
 interface PassportRow extends QueryResultRow {
@@ -71,6 +65,20 @@ interface MarketInstrumentRow extends InstrumentRow {
   trading_volume_24h: string;
   last_trade_price: string | null;
   price_change_bps: string | null;
+}
+
+interface IssuerInstrumentRow extends InstrumentRow {
+  passport: Readonly<Record<string, unknown>>;
+  verified_available: string;
+}
+
+interface CollateralPositionRow extends QueryResultRow {
+  asset_id: string;
+  reserved: string;
+  available: string;
+  unit: string;
+  verifier_proofs: readonly unknown[];
+  updated_at: Date | string;
 }
 
 interface DomainEventIdentity {
@@ -97,9 +105,9 @@ export class InstrumentListingService {
         `
           INSERT INTO instrument (
             id, type, legal_nature, status, currency, unit, unit_per_token,
-            supply_cap, version, extensions, created_at, updated_at
+            supply_cap, version, extensions, issuer_id, created_at, updated_at
           )
-          VALUES ($1, $2, $3, 'DRAFT', $4, $5, $6, $7, 1, $8::jsonb, $9, $9)
+          VALUES ($1, $2, $3, 'DRAFT', $4, $5, $6, $7, 1, $8::jsonb, $9, $10, $10)
           RETURNING ${INSTRUMENT_COLUMNS}
         `,
         [
@@ -111,6 +119,7 @@ export class InstrumentListingService {
           command.unitPerToken.toString(),
           command.supplyCap.toString(),
           JSON.stringify(command.extensions ?? {}),
+          command.actorId,
           occurredAt,
         ],
       );
@@ -134,7 +143,68 @@ export class InstrumentListingService {
         occurredAt,
         payload: { version: '1' },
       });
-      return { instrument: mapInstrument(instrument), passport: passportJson, version: 1 };
+      return { instrument: rowToInstrument(instrument), passport: passportJson, version: 1 };
+    });
+  }
+
+  public async updateDraft(command: UpdateInstrumentDraftCommand): Promise<InstrumentDraftResult> {
+    validateCreateDraft(command);
+    assertUuid(command.instrumentId, 'instrumentId');
+    assertPositiveVersion(command.version);
+    const passportJson = passportToJson(command.passport);
+    return this.withTransaction(async (client) => {
+      const instrument = await this.lockInstrument(client, command.instrumentId);
+      assertIssuer(instrument, command.actorId);
+      if (instrument.status !== 'DRAFT') throw invalidTransition(instrument.status, 'DRAFT');
+      if (BigInt(instrument.version) !== command.version) {
+        throw new InstrumentListingError('CONFLICT', 'Draft version is stale', 409);
+      }
+      const passport = await this.lockCurrentPassport(client, instrument);
+      if (passport.review_state !== 'DRAFT') {
+        throw new InstrumentListingError('CONFLICT', 'Passport is not editable', 409);
+      }
+      const occurredAt = this.now().toISOString();
+      const updated = await client.query<InstrumentRow>(
+        `UPDATE instrument
+         SET type = $2, legal_nature = $3, currency = $4, unit = $5,
+             unit_per_token = $6, supply_cap = $7, extensions = $8::jsonb, updated_at = $9
+         WHERE id = $1
+         RETURNING ${INSTRUMENT_COLUMNS}`,
+        [
+          instrument.id,
+          command.type,
+          command.legalNature,
+          command.currency,
+          command.unit,
+          command.unitPerToken.toString(),
+          command.supplyCap.toString(),
+          JSON.stringify(command.extensions ?? {}),
+          occurredAt,
+        ],
+      );
+      await client.query(
+        `UPDATE instrument_passport_versions
+         SET passport = $3::jsonb, updated_at = $4
+         WHERE instrument_id = $1 AND version = $2`,
+        [instrument.id, instrument.version, JSON.stringify(passportJson), occurredAt],
+      );
+      await this.appendDomainEvent(client, {
+        eventType: 'INSTRUMENT_DRAFT_UPDATED',
+        topic: 'domain.instrument.draft-updated.v1',
+        instrumentId: instrument.id,
+        actor: command.actorId,
+        reason: 'Instrument passport draft saved',
+        correlationId: command.correlationId,
+        occurredAt,
+        payload: { version: instrument.version },
+      });
+      return {
+        instrument: rowToInstrument(
+          requireRow(updated.rows[0], 'Updated instrument was not returned'),
+        ),
+        passport: passportJson,
+        version: safeVersion(instrument.version),
+      };
     });
   }
 
@@ -147,6 +217,7 @@ export class InstrumentListingService {
 
     return this.withTransaction(async (client) => {
       const instrument = await this.lockInstrument(client, command.instrumentId);
+      assertIssuer(instrument, command.actorId);
       if (BigInt(instrument.version) !== command.version) {
         throw new InstrumentListingError(
           'CONFLICT',
@@ -236,13 +307,103 @@ export class InstrumentListingService {
 
       const updated = await this.readInstrument(client, instrument.id);
       return {
-        instrument: mapInstrument(updated),
+        instrument: rowToInstrument(updated),
         passport: passportToJson(passport),
         passportHash,
         version: safeVersion(instrument.version),
         submittedAt,
       };
     });
+  }
+
+  public async listIssuerInstruments(
+    issuerId: string,
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<IssuerInstrumentPage> {
+    assertNonBlank(issuerId, 'issuerId');
+    const pageCursor = decodeMarketCursor(cursor);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+      throw validationError('limit', 'limit must be an integer between 1 and 200');
+    }
+    const result = await this.pool.query<IssuerInstrumentRow>(
+      `WITH issuer_instruments AS (
+         SELECT ${INSTRUMENT_COLUMNS}
+         FROM instrument
+         WHERE issuer_id = $1
+           AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))
+         ORDER BY created_at DESC, id DESC
+         LIMIT $4
+       )
+       SELECT issuer_instruments.*, passport.passport,
+              COALESCE(collateral.verified_available, 0)::text AS verified_available
+       FROM issuer_instruments
+       JOIN instrument_passport_versions AS passport
+         ON passport.instrument_id::text = issuer_instruments.id AND passport.version = issuer_instruments.version::bigint
+       LEFT JOIN LATERAL (
+         SELECT sum(reserved) AS verified_available
+         FROM collateral_position WHERE instrument_id::text = issuer_instruments.id
+       ) AS collateral ON true
+       ORDER BY issuer_instruments.created_at DESC, issuer_instruments.id DESC`,
+      [issuerId, pageCursor?.createdAt ?? null, pageCursor?.id ?? null, limit + 1],
+    );
+    const hasMore = result.rows.length > limit;
+    const rows = result.rows.slice(0, limit);
+    const last = rows.at(-1);
+    return {
+      items: rows.map((row) => ({
+        instrument: rowToInstrument(row),
+        passport: row.passport,
+        ...(row.passport_hash === null ? {} : { passportHash: row.passport_hash }),
+        version: safeVersion(row.version),
+        verifiedAvailable: BigInt(row.verified_available),
+      })),
+      page: {
+        limit,
+        hasMore,
+        ...(hasMore && last !== undefined
+          ? { nextCursor: encodeMarketCursor(toIso(last.created_at), last.id) }
+          : {}),
+      },
+    };
+  }
+
+  public async getIssuerInstrument(
+    instrumentId: string,
+    issuerId: string,
+  ): Promise<IssuerInstrumentResult> {
+    assertUuid(instrumentId, 'instrumentId');
+    assertNonBlank(issuerId, 'issuerId');
+    const instrument = await this.readInstrument(this.pool, instrumentId);
+    assertIssuer(instrument, issuerId);
+    const passport = await this.pool.query<PassportRow>(
+      `SELECT version::text, passport, review_state, passport_hash, submitted_at, published_at
+       FROM instrument_passport_versions WHERE instrument_id = $1 AND version = $2`,
+      [instrument.id, instrument.version],
+    );
+    const current = requireRow(passport.rows[0], 'Current passport was not found');
+    const positions = await this.readCollateralPositions(instrument.id);
+    const verified = await this.collateral.verifiedAvailable(instrument.id);
+    return {
+      instrument: rowToInstrument(instrument),
+      passport: current.passport,
+      ...(current.passport_hash === null ? {} : { passportHash: current.passport_hash }),
+      version: safeVersion(current.version),
+      collateralPositions: positions,
+      verifiedAvailable: verified,
+    };
+  }
+
+  public async getCollateralSummary(
+    instrumentId: string,
+    issuerId: string,
+  ): Promise<CollateralSummaryResult> {
+    const issue = await this.getIssuerInstrument(instrumentId, issuerId);
+    return {
+      instrumentId,
+      verifiedAvailable: issue.verifiedAvailable,
+      positions: issue.collateralPositions,
+    };
   }
 
   public approve(command: ReviewCommand): Promise<ReviewResult> {
@@ -309,7 +470,7 @@ export class InstrumentListingService {
       });
       const updated = await this.readInstrument(client, instrument.id);
       return {
-        instrument: mapInstrument(updated),
+        instrument: rowToInstrument(updated),
         passport: passportJson,
         version: safeVersion(nextVersion.toString()),
       };
@@ -339,7 +500,7 @@ export class InstrumentListingService {
         passportVersion: BigInt(instrument.version),
         occurredAt: this.now().toISOString(),
       });
-      return mapInstrument(await this.readInstrument(client, instrument.id));
+      return rowToInstrument(await this.readInstrument(client, instrument.id));
     });
   }
 
@@ -440,7 +601,7 @@ export class InstrumentListingService {
     );
 
     return {
-      instrument: mapInstrument(instrument),
+      instrument: rowToInstrument(instrument),
       passport: passport.passport,
       passportHash: passport.passport_hash,
       version: safeVersion(passport.version),
@@ -448,7 +609,7 @@ export class InstrumentListingService {
         assetId: row.asset_id,
         class: row.class,
         owner: row.owner,
-        quantity: row.asset_quantity,
+        quantity: BigInt(row.asset_quantity),
         unit: row.asset_unit,
         location: row.location,
         encumbranceStatus: row.encumbrance_status,
@@ -456,8 +617,8 @@ export class InstrumentListingService {
       collateralPositions: collateral.rows.map((row) => ({
         assetId: row.asset_id,
         instrumentId,
-        reserved: row.reserved,
-        available: row.available,
+        reserved: BigInt(row.reserved),
+        available: BigInt(row.available),
         unit: row.asset_unit,
         verifierProofs: row.verifier_proofs,
         updatedAt: toIso(row.position_updated_at),
@@ -560,13 +721,13 @@ export class InstrumentListingService {
           ? tickerValue
           : undefined;
       return {
-        instrument: mapInstrument(row),
+        instrument: rowToInstrument(row),
         ...(ticker === undefined ? {} : { ticker }),
         name: `${passport.underlyingAsset.commodity} ${passport.underlyingAsset.grade}`,
-        ...(row.last_trade_price === null ? {} : { lastTradePrice: row.last_trade_price }),
-        ...(row.price_change_bps === null ? {} : { priceChangeBps: row.price_change_bps }),
-        availableSupply: row.available_supply,
-        tradingVolume24h: row.trading_volume_24h,
+        ...(row.last_trade_price === null ? {} : { lastTradePrice: BigInt(row.last_trade_price) }),
+        ...(row.price_change_bps === null ? {} : { priceChangeBps: BigInt(row.price_change_bps) }),
+        availableSupply: BigInt(row.available_supply),
+        tradingVolume24h: BigInt(row.trading_volume_24h),
       };
     });
     const lastRow = rows.at(-1);
@@ -696,7 +857,7 @@ export class InstrumentListingService {
       }
 
       return {
-        instrument: mapInstrument(await this.readInstrument(client, instrument.id)),
+        instrument: rowToInstrument(await this.readInstrument(client, instrument.id)),
         passportVersion: safeVersion(passport.version),
         decision,
         distinctApprovalCount: approvalCount,
@@ -849,6 +1010,25 @@ export class InstrumentListingService {
     return row;
   }
 
+  private async readCollateralPositions(
+    instrumentId: string,
+  ): Promise<readonly Readonly<Record<string, unknown>>[]> {
+    const result = await this.pool.query<CollateralPositionRow>(
+      `SELECT asset_id, reserved::text, available::text, unit, verifier_proofs, updated_at
+       FROM collateral_position WHERE instrument_id = $1 ORDER BY asset_id`,
+      [instrumentId],
+    );
+    return result.rows.map((row) => ({
+      assetId: row.asset_id,
+      instrumentId,
+      reserved: BigInt(row.reserved),
+      available: BigInt(row.available),
+      unit: row.unit,
+      verifierProofs: row.verifier_proofs,
+      updatedAt: toIso(row.updated_at),
+    }));
+  }
+
   private async readInstrument(
     executor: Pick<Pool | PoolClient, 'query'>,
     instrumentId: string,
@@ -914,30 +1094,10 @@ const INSTRUMENT_COLUMNS = `
   passport_hash,
   suspended_from_status::text,
   extensions,
+  issuer_id,
   created_at,
   updated_at
 `;
-
-function mapInstrument(row: InstrumentRow): InstrumentView {
-  if (!isInstrumentStatus(row.status)) {
-    throw new Error(`Unknown persisted instrument status ${row.status}`);
-  }
-  return {
-    id: row.id,
-    type: row.type,
-    legalNature: row.legal_nature,
-    status: row.status,
-    currency: row.currency,
-    unit: row.unit,
-    unitPerToken: row.unit_per_token,
-    supplyCap: row.supply_cap,
-    circulatingSupply: row.circulating_supply,
-    version: safeVersion(row.version),
-    createdAt: toIso(row.created_at),
-    updatedAt: toIso(row.updated_at),
-    extensions: row.extensions,
-  };
-}
 
 function validateCreateDraft(command: CreateInstrumentDraftCommand): void {
   validateCommonCommand(randomUUID(), command.actorId, command.correlationId);
@@ -952,8 +1112,20 @@ function validateCreateDraft(command: CreateInstrumentDraftCommand): void {
 }
 
 function validatePassportAmounts(passport: PassportDraft): void {
+  if (passport.underlyingAsset?.quantity !== undefined) {
+    assertPositiveAmount(passport.underlyingAsset.quantity, 'passport.underlyingAsset.quantity');
+  }
+  for (const [index, document] of (passport.underlyingAsset?.documents ?? []).entries()) {
+    assertNonNegativeAmount(document.size, `passport.underlyingAsset.documents[${index}].size`);
+  }
   if (passport.economics !== undefined) {
     assertPositiveAmount(passport.economics.issuePrice, 'passport.economics.issuePrice');
+    if (passport.economics.collateralReserveBps !== undefined) {
+      assertNonNegativeAmount(
+        passport.economics.collateralReserveBps,
+        'passport.economics.collateralReserveBps',
+      );
+    }
     for (const [index, fee] of passport.economics.feeSchedule.entries()) {
       assertNonNegativeAmount(fee.amount, `passport.economics.feeSchedule[${index}].amount`);
     }
@@ -975,6 +1147,16 @@ function validatePassportAmounts(passport: PassportDraft): void {
   }
   if (parsePassportDraft(passportToJson(passport)) === null) {
     throw validationError('passport', 'passport does not match TokenPassportDraft');
+  }
+}
+
+function assertIssuer(instrument: InstrumentRow, issuerId: string): void {
+  if (instrument.issuer_id !== issuerId) {
+    throw new InstrumentListingError(
+      'PERMISSION_DENIED',
+      `Instrument ${instrument.id} is not owned by the authenticated issuer`,
+      403,
+    );
   }
 }
 

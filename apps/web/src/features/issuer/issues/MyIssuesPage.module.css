@@ -1,0 +1,14 @@
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.error {
+  border-radius: var(--cc-radius-sm);
+  background: var(--cc-red-100);
+  color: var(--cc-red-700);
+  padding: 12px;
+}
+.loading {
+  color: var(--cc-muted);
+}

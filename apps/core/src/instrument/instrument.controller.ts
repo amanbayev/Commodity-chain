@@ -1,8 +1,12 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, Res } from '@nestjs/common';
 
 import { InstrumentListingError } from './instrument-listing.errors.js';
 import { InstrumentListingService } from './instrument-listing.service.js';
-import type { CreateInstrumentDraftCommand } from './instrument-listing.types.js';
+import { instrumentResponseToJson } from './instrument-response.mapper.js';
+import type {
+  CreateInstrumentDraftCommand,
+  UpdateInstrumentDraftCommand,
+} from './instrument-listing.types.js';
 import { parsePassportDraft } from './instrument-passport.js';
 import type { LegalNature } from './instrument-passport.js';
 
@@ -49,6 +53,58 @@ export class InstrumentController {
       if (command === null) throw invalidBody('InstrumentDraftCreate');
       return this.instruments.createDraft(command);
     });
+  }
+
+  @Get('issues')
+  public async issues(
+    @Headers('x-actor-id') actorId: string | undefined,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+    @Query('cursor') cursor: string | undefined,
+    @Query('limit') limitValue: string | undefined,
+    @Res({ passthrough: true }) response: PassthroughResponse,
+  ): Promise<unknown> {
+    return this.respond(response, correlationId ?? '', 200, () =>
+      this.instruments.listIssuerInstruments(actorId ?? '', cursor, parseLimit(limitValue)),
+    );
+  }
+
+  @Patch(':id/draft')
+  public async updateDraft(
+    @Param('id') instrumentId: string,
+    @Body() payload: unknown,
+    @Headers('x-actor-id') actorId: string | undefined,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+    @Res({ passthrough: true }) response: PassthroughResponse,
+  ): Promise<unknown> {
+    return this.respond(response, correlationId ?? '', 200, async () => {
+      const command = parseDraftUpdate(instrumentId, payload, actorId ?? '', correlationId ?? '');
+      if (command === null) throw invalidBody('InstrumentDraftUpdate');
+      return this.instruments.updateDraft(command);
+    });
+  }
+
+  @Get(':id/issue')
+  public async issue(
+    @Param('id') instrumentId: string,
+    @Headers('x-actor-id') actorId: string | undefined,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+    @Res({ passthrough: true }) response: PassthroughResponse,
+  ): Promise<unknown> {
+    return this.respond(response, correlationId ?? '', 200, () =>
+      this.instruments.getIssuerInstrument(instrumentId, actorId ?? ''),
+    );
+  }
+
+  @Get(':id/collateral')
+  public async collateral(
+    @Param('id') instrumentId: string,
+    @Headers('x-actor-id') actorId: string | undefined,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+    @Res({ passthrough: true }) response: PassthroughResponse,
+  ): Promise<unknown> {
+    return this.respond(response, correlationId ?? '', 200, () =>
+      this.instruments.getCollateralSummary(instrumentId, actorId ?? ''),
+    );
   }
 
   @Post(':id/submit')
@@ -100,7 +156,7 @@ export class InstrumentController {
   ): Promise<unknown> {
     response.setHeader('X-Correlation-Id', correlationId);
     try {
-      const body = await operation();
+      const body = instrumentResponseToJson(await operation());
       response.status(successStatus);
       return body;
     } catch (error: unknown) {
@@ -165,6 +221,19 @@ function parseDraft(
     actorId,
     correlationId,
   };
+}
+
+function parseDraftUpdate(
+  instrumentId: string,
+  payload: unknown,
+  actorId: string,
+  correlationId: string,
+): UpdateInstrumentDraftCommand | null {
+  if (!isRecord(payload) || !Number.isSafeInteger(payload['version'])) return null;
+  const { version, ...draftPayload } = payload;
+  const draft = parseDraft(draftPayload, actorId, correlationId);
+  if (draft === null || (version as number) <= 0) return null;
+  return { ...draft, instrumentId, version: BigInt(version as number) };
 }
 
 function invalidBody(schema: string): InstrumentListingError {

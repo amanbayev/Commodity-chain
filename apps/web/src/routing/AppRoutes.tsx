@@ -4,6 +4,9 @@ import { AppShell } from '../layout/AppShell.js';
 import { InstrumentPage } from '../features/investor/instrument/InstrumentPage.js';
 import { MarketPage } from '../features/investor/market/MarketPage.js';
 import { OrdersPage } from '../features/investor/orders/OrdersPage.js';
+import { IssueDetailPage } from '../features/issuer/issue/IssueDetailPage.js';
+import { MyIssuesPage } from '../features/issuer/issues/MyIssuesPage.js';
+import { CreateTokenPage } from '../features/issuer/wizard/CreateTokenPage.js';
 import { PlaceholderPage } from '../pages/PlaceholderPage.js';
 import { StyleguidePage } from '../pages/StyleguidePage.js';
 
@@ -24,15 +27,9 @@ export function AppRoutes() {
           }
           path="assets"
         />
-        <Route
-          element={
-            <PlaceholderPage
-              subtitle="Подготовка паспорта и отправка инструмента на листинг."
-              title="Создать токен"
-            />
-          }
-          path="create-token"
-        />
+        <Route element={<CreateTokenPage />} path="create-token" />
+        <Route element={<MyIssuesPage />} path="my-issues" />
+        <Route element={<IssueDetailPage />} path="my-issues/:id" />
         <Route
           element={
             <PlaceholderPage
@@ -69,15 +66,7 @@ export function AppRoutes() {
           }
           path="cabinet/investor"
         />
-        <Route
-          element={
-            <PlaceholderPage
-              subtitle="Выпуски, обеспечение и первичные размещения."
-              title="Кабинет эмитента"
-            />
-          }
-          path="cabinet/issuer"
-        />
+        <Route element={<Navigate replace to="/my-issues" />} path="cabinet/issuer" />
         <Route
           element={
             <PlaceholderPage

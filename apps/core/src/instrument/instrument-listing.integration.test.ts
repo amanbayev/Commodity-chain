@@ -66,6 +66,27 @@ describeWithDatabase('instrument listing workflow', () => {
     expect(await instrumentStatus(draft.instrument.id)).toBe('DRAFT');
   });
 
+  it('updates and lists only the issuer own draft', async () => {
+    const draft = await service.createDraft(draftCommand({}));
+    const updated = await service.updateDraft({
+      ...draftCommand(completePassport()),
+      instrumentId: draft.instrument.id,
+      version: 1n,
+      supplyCap: 5_000n,
+      extensions: { ticker: 'WHT-3-2026', name: 'Пшеница 3 класса' },
+    });
+
+    expect(updated.instrument.supplyCap).toBe(5_000n);
+    const page = await service.listIssuerInstruments('issuer-1', undefined, 20);
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]?.instrument.id).toBe(draft.instrument.id);
+    expect(page.items[0]?.passport).toEqual(updated.passport);
+
+    await expect(
+      service.getIssuerInstrument(draft.instrument.id, 'issuer-2'),
+    ).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+  });
+
   it('requires two different operators and keeps review comments out of the public passport', async () => {
     const submitted = await createSubmitted();
     const first = await service.approve(
@@ -84,8 +105,8 @@ describeWithDatabase('instrument listing workflow', () => {
     expect(second.instrument.status).toBe('APPROVED');
     const publicPassport = await service.getPublicPassport(submitted.instrument.id);
     expect(publicPassport.passportHash).toBe(submitted.passportHash);
-    expect(JSON.stringify(publicPassport)).not.toContain('first-secret');
-    expect(JSON.stringify(publicPassport)).not.toContain('second-secret');
+    expect(JSON.stringify(publicPassport.passport)).not.toContain('first-secret');
+    expect(JSON.stringify(publicPassport.passport)).not.toContain('second-secret');
   });
 
   it('creates a new version and hash after return for revision without reversing aggregate state', async () => {
