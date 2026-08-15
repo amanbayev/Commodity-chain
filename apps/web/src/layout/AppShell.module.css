@@ -1,0 +1,34 @@
+.shell {
+  min-height: 100vh;
+  background: var(--cc-canvas);
+}
+.workspace {
+  min-height: 100vh;
+  margin-left: 248px;
+}
+.content {
+  width: min(100%, 1540px);
+  margin: 0 auto;
+  padding: 30px;
+}
+.overlay {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    margin-left: 0;
+  }
+  .content {
+    padding: 22px 16px;
+  }
+  .overlay {
+    position: fixed;
+    z-index: 15;
+    inset: 0;
+    display: block;
+    width: 100%;
+    background: rgba(0, 20, 40, 0.45);
+    border: 0;
+  }
+}

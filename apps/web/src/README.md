@@ -1,3 +1,3 @@
 # Web source
 
-Future React routes, generated API clients, screens, and colocated tests will live here.
+The source is split into API, authentication, design-system components, layout, routing, pages, and theme tokens. Tests are colocated with the behavior they verify.

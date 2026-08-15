@@ -44,6 +44,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm contract:lint
+      - name: Verify generated API types are current
+        run: pnpm gen:api:check
 
   migrate-check:
     name: Migrate check

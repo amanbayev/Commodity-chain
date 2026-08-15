@@ -1,0 +1,20 @@
+.card {
+  overflow: hidden;
+  background: var(--cc-surface);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-md);
+  box-shadow: var(--cc-shadow-card);
+}
+
+.title {
+  margin: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--cc-border);
+  color: var(--cc-ink);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.body {
+  padding: 20px;
+}
