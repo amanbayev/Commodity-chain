@@ -106,3 +106,12 @@ export interface OrderBookView {
     readonly orderCount: number;
   }[];
 }
+
+export interface OrderPage {
+  readonly items: readonly OrderView[];
+  readonly page: {
+    readonly nextCursor?: string;
+    readonly limit: number;
+    readonly hasMore: boolean;
+  };
+}

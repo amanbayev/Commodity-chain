@@ -1,0 +1,39 @@
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.metric {
+  display: grid;
+  min-height: 92px;
+  align-content: center;
+  gap: 6px;
+}
+.metric span,
+.metric small {
+  color: var(--cc-muted);
+  font-size: 0.75rem;
+}
+.metric strong {
+  color: var(--cc-ink);
+  font-size: 1.35rem;
+}
+.error {
+  margin-bottom: 16px;
+  padding: 12px;
+  color: var(--cc-red-700);
+  background: var(--cc-red-100);
+  border-radius: var(--cc-radius-sm);
+}
+.loading {
+  margin: 14px 0 0;
+  color: var(--cc-muted);
+  text-align: center;
+}
+
+@media (max-width: 820px) {
+  .summary {
+    grid-template-columns: 1fr;
+  }
+}

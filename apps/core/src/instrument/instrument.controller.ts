@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Query, Res } from '@nestjs/common';
 
 import { InstrumentListingError } from './instrument-listing.errors.js';
 import { InstrumentListingService } from './instrument-listing.service.js';
@@ -24,6 +24,18 @@ const LEGAL_NATURES = new Set<LegalNature>([
 @Controller('instruments')
 export class InstrumentController {
   public constructor(private readonly instruments: InstrumentListingService) {}
+
+  @Get()
+  public async listMarket(
+    @Query('cursor') cursor: string | undefined,
+    @Query('limit') limitValue: string | undefined,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+    @Res({ passthrough: true }) response: PassthroughResponse,
+  ): Promise<unknown> {
+    return this.respond(response, correlationId ?? '', 200, () =>
+      this.instruments.listMarketInstruments(cursor, parseLimit(limitValue)),
+    );
+  }
 
   @Post('drafts')
   public async createDraft(
@@ -102,6 +114,14 @@ export class InstrumentController {
       };
     }
   }
+}
+
+function parseLimit(value: string | undefined): number {
+  if (value === undefined) return 50;
+  if (!/^[1-9][0-9]*$/u.test(value)) throw invalidBody('CursorPageLimit');
+  const limit = Number(value);
+  if (!Number.isSafeInteger(limit) || limit > 200) throw invalidBody('CursorPageLimit');
+  return limit;
 }
 
 function parseDraft(

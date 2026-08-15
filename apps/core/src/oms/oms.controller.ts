@@ -13,6 +13,32 @@ interface PassthroughResponse {
 export class OrdersController {
   public constructor(private readonly oms: OmsService) {}
 
+  @Get()
+  public async list(
+    @Headers('x-participant-id') participantId: string | undefined,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+    @Query('cursor') cursor: string | undefined,
+    @Query('limit') limitValue: string | undefined,
+    @Res({ passthrough: true }) response: PassthroughResponse,
+  ): Promise<unknown> {
+    const correlation = correlationId ?? '';
+    response.setHeader('X-Correlation-Id', correlation);
+    try {
+      const body = await this.oms.listOrders(participantId ?? '', cursor, parseLimit(limitValue));
+      response.status(200);
+      return body;
+    } catch (error: unknown) {
+      if (!(error instanceof OmsError)) throw error;
+      response.status(error.httpStatus);
+      return {
+        code: error.code,
+        message: error.message,
+        correlationId: correlation,
+        details: error.details,
+      };
+    }
+  }
+
   @Post()
   public async place(
     @Body() payload: unknown,
@@ -126,6 +152,18 @@ function parsePlace(
     idempotencyKey,
     correlationId,
   };
+}
+
+function parseLimit(value: string | undefined): number {
+  if (value === undefined) return 50;
+  if (!/^[1-9][0-9]*$/u.test(value)) {
+    throw new OmsError('VALIDATION_ERROR', 'limit must be an integer between 1 and 200', 400);
+  }
+  const limit = Number(value);
+  if (!Number.isSafeInteger(limit) || limit > 200) {
+    throw new OmsError('VALIDATION_ERROR', 'limit must be an integer between 1 and 200', 400);
+  }
+  return limit;
 }
 
 function invalidRequest(correlationId: string, message: string): OmsExecutionResult {

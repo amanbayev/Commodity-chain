@@ -1,0 +1,38 @@
+.buy {
+  color: var(--cc-green-700);
+  font-weight: 700;
+}
+.sell {
+  color: var(--cc-red-700);
+  font-weight: 700;
+}
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 26, 51, 0.58);
+}
+.dialog {
+  width: min(440px, 100%);
+  border-radius: var(--cc-radius-lg);
+  background: var(--cc-surface);
+  box-shadow: var(--cc-shadow-raised);
+  padding: 24px;
+}
+.dialog h2 {
+  margin: 0 0 10px;
+  color: var(--cc-ink);
+}
+.dialog p {
+  margin: 0 0 22px;
+  color: var(--cc-muted);
+  line-height: 1.55;
+}
+.dialog > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

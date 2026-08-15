@@ -1,0 +1,19 @@
+.instrument {
+  display: grid;
+  gap: 3px;
+}
+.instrument strong {
+  color: var(--cc-ink);
+}
+.instrument span {
+  color: var(--cc-muted);
+  font-size: 0.75rem;
+}
+.positive {
+  color: var(--cc-green-600);
+  font-weight: 700;
+}
+.negative {
+  color: var(--cc-red-600);
+  font-weight: 700;
+}

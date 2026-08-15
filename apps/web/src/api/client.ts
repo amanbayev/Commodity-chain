@@ -15,6 +15,7 @@ export interface ApiClientOptions {
 export interface ApiRequest<Path extends ApiPath, Method extends ApiMethodForPath<Path>, Body> {
   body?: Body;
   correlationId?: string;
+  headers?: Readonly<Record<string, string>>;
   idempotencyKey?: string;
   method: Uppercase<Method>;
   path: Path;
@@ -69,6 +70,7 @@ export function createApiClient({
       if (accessToken !== null) headers.set('Authorization', `Bearer ${accessToken}`);
       if (request.idempotencyKey !== undefined)
         headers.set('Idempotency-Key', request.idempotencyKey);
+      for (const [name, value] of Object.entries(request.headers ?? {})) headers.set(name, value);
       if (request.body !== undefined) headers.set('Content-Type', 'application/json');
 
       const url = `${baseUrl}${expandPath(request.path, request.pathParameters ?? {})}${buildQuery(request.query)}`;
