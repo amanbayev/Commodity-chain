@@ -19,6 +19,7 @@
     "lint": "eslint . && prettier --check .",
     "migrate:check": "dbmate --migrations-dir ops/migrations up",
     "reconcile:supply": "node --experimental-strip-types ops/reconcile-supply.ts",
+    "reconcile:settlements": "node --experimental-strip-types ops/reconcile-settlements.ts",
     "test": "vitest run --passWithNoTests",
     "typecheck": "pnpm -r --if-present typecheck"
   },
