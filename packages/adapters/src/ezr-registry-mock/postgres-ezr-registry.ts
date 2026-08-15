@@ -154,6 +154,9 @@ export class PostgresEzrRegistry implements EzrRegistry {
     assertExternalId(redemptionId, 'redemptionId');
 
     return this.changeReceipt(receiptId, async (client, current) => {
+      if (current.status === 'RELEASED' && current.redemptionId === redemptionId) {
+        return current;
+      }
       if (current.status !== 'LOCKED') {
         throw new EzrRegistryError('INVALID_STATE', `Receipt ${receiptId} cannot be released`);
       }
@@ -289,6 +292,7 @@ export class PostgresEzrRegistry implements EzrRegistry {
       observedAt: changedAt.toISOString(),
       effectiveAt: changedAt.toISOString(),
       sourceId: this.options.sourceId,
+      ...(receipt.redemptionId === undefined ? {} : { redemptionId: receipt.redemptionId }),
       evidenceHash: evidenceHash(receipt, eventType),
       nonce,
     };
@@ -421,6 +425,7 @@ function evidenceHash(receipt: Receipt, eventType: OracleEventType): string {
     owner: receipt.owner,
     quantity: receipt.quantity.toString(),
     receiptId: receipt.receiptId,
+    ...(receipt.redemptionId === undefined ? {} : { redemptionId: receipt.redemptionId }),
     status: receipt.status,
     unit: receipt.unit,
   });

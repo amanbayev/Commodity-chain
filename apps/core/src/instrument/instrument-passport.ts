@@ -54,6 +54,7 @@ export interface TradingParametersPassport {
   readonly tickSize: bigint;
   readonly lotSize: bigint;
   readonly minimumOrderQuantity: bigint;
+  readonly minimumDeliveryQuantity: bigint;
   readonly settlementCycle: 'T_PLUS_0' | 'T_PLUS_1' | 'T_PLUS_2';
 }
 
@@ -216,6 +217,7 @@ export function passportToJson(passport: PassportDraft): Readonly<Record<string,
             tickSize: passport.tradingParameters.tickSize.toString(),
             lotSize: passport.tradingParameters.lotSize.toString(),
             minimumOrderQuantity: passport.tradingParameters.minimumOrderQuantity.toString(),
+            minimumDeliveryQuantity: passport.tradingParameters.minimumDeliveryQuantity.toString(),
             settlementCycle: passport.tradingParameters.settlementCycle,
           },
         }),
@@ -401,10 +403,17 @@ function parseTrading(value: unknown): TradingParametersPassport | null | undefi
   if (value === undefined) return undefined;
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ['tickSize', 'lotSize', 'minimumOrderQuantity', 'settlementCycle']) ||
+    !hasOnlyKeys(value, [
+      'tickSize',
+      'lotSize',
+      'minimumOrderQuantity',
+      'minimumDeliveryQuantity',
+      'settlementCycle',
+    ]) ||
     !isPositiveIntegerString(value['tickSize']) ||
     !isPositiveIntegerString(value['lotSize']) ||
     !isPositiveIntegerString(value['minimumOrderQuantity']) ||
+    !isPositiveIntegerString(value['minimumDeliveryQuantity']) ||
     !isSettlementCycle(value['settlementCycle'])
   ) {
     return null;
@@ -413,6 +422,7 @@ function parseTrading(value: unknown): TradingParametersPassport | null | undefi
     tickSize: BigInt(value['tickSize']),
     lotSize: BigInt(value['lotSize']),
     minimumOrderQuantity: BigInt(value['minimumOrderQuantity']),
+    minimumDeliveryQuantity: BigInt(value['minimumDeliveryQuantity']),
     settlementCycle: value['settlementCycle'],
   };
 }

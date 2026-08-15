@@ -273,6 +273,7 @@ describeWithDatabase('OMS PostgreSQL integration', () => {
             tickSize: '10',
             lotSize: '10',
             minimumOrderQuantity: '10',
+            minimumDeliveryQuantity: '10',
             settlementCycle: 'T_PLUS_1',
           },
         }),

@@ -843,6 +843,10 @@ function validatePassportAmounts(passport: PassportDraft): void {
       passport.tradingParameters.minimumOrderQuantity,
       'passport.tradingParameters.minimumOrderQuantity',
     );
+    assertPositiveAmount(
+      passport.tradingParameters.minimumDeliveryQuantity,
+      'passport.tradingParameters.minimumDeliveryQuantity',
+    );
   }
   if (parsePassportDraft(passportToJson(passport)) === null) {
     throw validationError('passport', 'passport does not match TokenPassportDraft');

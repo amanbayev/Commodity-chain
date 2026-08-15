@@ -16,6 +16,7 @@ export function canonicalOracleEventPayload(envelope: OracleEventEnvelope): stri
     observedAt: envelope.observedAt,
     effectiveAt: envelope.effectiveAt,
     sourceId: envelope.sourceId,
+    ...(envelope.redemptionId === undefined ? {} : { redemptionId: envelope.redemptionId }),
     evidenceHash: envelope.evidenceHash,
     nonce: envelope.nonce,
     ...(envelope.extensions === undefined ? {} : { extensions: envelope.extensions }),

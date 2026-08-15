@@ -93,6 +93,23 @@ export class PostgresCollateralLedger implements CollateralLedger {
     return BigInt(result.rows[0]?.total ?? '0');
   }
 
+  public releaseWithinTransaction(
+    client: PoolClient,
+    assetId: string,
+    instrumentId: string,
+    quantity: bigint,
+    oracleEventId: string,
+  ): Promise<CollateralPosition> {
+    return this.changeWithinTransaction(
+      client,
+      'RELEASE',
+      assetId,
+      instrumentId,
+      quantity,
+      oracleEventId,
+    );
+  }
+
   private async change(
     movementType: CollateralMovementType,
     assetId: string,
@@ -108,28 +125,7 @@ export class PostgresCollateralLedger implements CollateralLedger {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
-        `collateral-oracle:${oracleEventId}`,
-      ]);
-
-      const existing = await this.readMovement(client, oracleEventId);
-      if (existing !== null) {
-        if (
-          existing.movement_type !== movementType ||
-          existing.asset_id !== assetId ||
-          existing.instrument_id !== instrumentId ||
-          BigInt(existing.quantity) !== quantity
-        ) {
-          throw new CollateralError(
-            'ORACLE_EVENT_MISMATCH',
-            `Oracle event ${oracleEventId} was already applied with another collateral command`,
-          );
-        }
-        await client.query('COMMIT');
-        return mapPosition(existing);
-      }
-
-      const oracleEvent = await this.requireOracleEvent(
+      const changed = await this.changeWithinTransaction(
         client,
         movementType,
         assetId,
@@ -137,110 +133,6 @@ export class PostgresCollateralLedger implements CollateralLedger {
         quantity,
         oracleEventId,
       );
-      const instrument = await this.lockInstrument(client, instrumentId);
-      const asset = await this.lockAsset(client, assetId);
-      if (asset.unit !== oracleEvent.unit || instrument.unit !== oracleEvent.unit) {
-        throw new CollateralError(
-          'ORACLE_EVENT_MISMATCH',
-          'Oracle, asset, and instrument units must match',
-        );
-      }
-
-      const totalReservedBefore = await this.totalReservedForAsset(client, assetId);
-      const current = await this.readPosition(client, assetId, instrumentId, true);
-      const reservedBefore = current?.reserved ?? 0n;
-      const assetQuantity = BigInt(asset.quantity);
-      const totalReservedAfter =
-        movementType === 'RESERVE'
-          ? totalReservedBefore + quantity
-          : totalReservedBefore - quantity;
-      const reservedAfter =
-        movementType === 'RESERVE' ? reservedBefore + quantity : reservedBefore - quantity;
-
-      if (movementType === 'RESERVE' && totalReservedAfter > assetQuantity) {
-        throw new CollateralError(
-          'ASSET_COLLATERAL_EXCEEDED',
-          `Reservations for asset ${assetId} exceed its quantity`,
-        );
-      }
-      if (movementType === 'RELEASE' && (current === null || reservedAfter < 0n)) {
-        throw new CollateralError(
-          'COLLATERAL_RELEASE_EXCEEDS_RESERVED',
-          `Release exceeds reserved collateral for ${assetId}/${instrumentId}`,
-        );
-      }
-
-      if (movementType === 'RELEASE') {
-        const instrumentCollateralBefore = await this.verifiedAvailableWithin(client, instrumentId);
-        const instrumentCollateralAfter = instrumentCollateralBefore - quantity;
-        const required = BigInt(instrument.circulating_supply) * BigInt(instrument.unit_per_token);
-        if (instrumentCollateralAfter < required) {
-          throw new CollateralError(
-            'COLLATERAL_SUPPORT_IN_USE',
-            `Release would leave instrument ${instrumentId} undercollateralized`,
-          );
-        }
-      }
-
-      const availableAfter = assetQuantity - totalReservedAfter;
-      const changed = await this.writePosition(
-        client,
-        assetId,
-        instrumentId,
-        reservedAfter,
-        availableAfter,
-        asset.unit,
-        oracleEvent,
-      );
-      await client.query(
-        'UPDATE collateral_position SET available = $2, updated_at = now() WHERE asset_id = $1',
-        [assetId, availableAfter.toString()],
-      );
-      await client.query(
-        `
-          UPDATE asset
-          SET encumbrance_status = $2, updated_at = now()
-          WHERE asset_id = $1
-        `,
-        [assetId, totalReservedAfter === 0n ? 'RELEASED' : 'LOCKED'],
-      );
-      await client.query(
-        `
-          INSERT INTO collateral_position_movements (
-            oracle_event_row_id,
-            oracle_event_id,
-            movement_type,
-            asset_id,
-            instrument_id,
-            quantity,
-            reserved_before,
-            reserved_after,
-            available_after
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `,
-        [
-          oracleEvent.id,
-          oracleEventId,
-          movementType,
-          assetId,
-          instrumentId,
-          quantity.toString(),
-          reservedBefore.toString(),
-          reservedAfter.toString(),
-          availableAfter.toString(),
-        ],
-      );
-      await this.appendAuditEvent(
-        client,
-        movementType,
-        assetId,
-        instrumentId,
-        quantity,
-        oracleEvent,
-        changed,
-      );
-
       await client.query('COMMIT');
       return changed;
     } catch (error: unknown) {
@@ -249,6 +141,129 @@ export class PostgresCollateralLedger implements CollateralLedger {
     } finally {
       client.release();
     }
+  }
+
+  private async changeWithinTransaction(
+    client: PoolClient,
+    movementType: CollateralMovementType,
+    assetId: string,
+    instrumentId: string,
+    quantity: bigint,
+    oracleEventId: string,
+  ): Promise<CollateralPosition> {
+    assertAssetId(assetId);
+    assertUuid(instrumentId, 'instrumentId');
+    assertUuid(oracleEventId, 'oracleEventId');
+    assertPositiveQuantity(quantity);
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+      `collateral-oracle:${oracleEventId}`,
+    ]);
+    const existing = await this.readMovement(client, oracleEventId);
+    if (existing !== null) {
+      if (
+        existing.movement_type !== movementType ||
+        existing.asset_id !== assetId ||
+        existing.instrument_id !== instrumentId ||
+        BigInt(existing.quantity) !== quantity
+      ) {
+        throw new CollateralError(
+          'ORACLE_EVENT_MISMATCH',
+          `Oracle event ${oracleEventId} was already applied with another collateral command`,
+        );
+      }
+      return mapPosition(existing);
+    }
+    const oracleEvent = await this.requireOracleEvent(
+      client,
+      movementType,
+      assetId,
+      instrumentId,
+      quantity,
+      oracleEventId,
+    );
+    const instrument = await this.lockInstrument(client, instrumentId);
+    const asset = await this.lockAsset(client, assetId);
+    if (asset.unit !== oracleEvent.unit || instrument.unit !== oracleEvent.unit) {
+      throw new CollateralError(
+        'ORACLE_EVENT_MISMATCH',
+        'Oracle, asset, and instrument units must match',
+      );
+    }
+    const totalReservedBefore = await this.totalReservedForAsset(client, assetId);
+    const current = await this.readPosition(client, assetId, instrumentId, true);
+    const reservedBefore = current?.reserved ?? 0n;
+    const assetQuantity = BigInt(asset.quantity);
+    const totalReservedAfter =
+      movementType === 'RESERVE' ? totalReservedBefore + quantity : totalReservedBefore - quantity;
+    const reservedAfter =
+      movementType === 'RESERVE' ? reservedBefore + quantity : reservedBefore - quantity;
+    if (movementType === 'RESERVE' && totalReservedAfter > assetQuantity) {
+      throw new CollateralError(
+        'ASSET_COLLATERAL_EXCEEDED',
+        `Reservations for asset ${assetId} exceed its quantity`,
+      );
+    }
+    if (movementType === 'RELEASE' && (current === null || reservedAfter < 0n)) {
+      throw new CollateralError(
+        'COLLATERAL_RELEASE_EXCEEDS_RESERVED',
+        `Release exceeds reserved collateral for ${assetId}/${instrumentId}`,
+      );
+    }
+    if (movementType === 'RELEASE') {
+      const collateralAfter = (await this.verifiedAvailableWithin(client, instrumentId)) - quantity;
+      const required = BigInt(instrument.circulating_supply) * BigInt(instrument.unit_per_token);
+      if (collateralAfter < required) {
+        throw new CollateralError(
+          'COLLATERAL_SUPPORT_IN_USE',
+          `Release would leave instrument ${instrumentId} undercollateralized`,
+        );
+      }
+    }
+    const availableAfter = assetQuantity - totalReservedAfter;
+    const changed = await this.writePosition(
+      client,
+      assetId,
+      instrumentId,
+      reservedAfter,
+      availableAfter,
+      asset.unit,
+      oracleEvent,
+    );
+    await client.query(
+      'UPDATE collateral_position SET available = $2, updated_at = now() WHERE asset_id = $1',
+      [assetId, availableAfter.toString()],
+    );
+    await client.query(
+      'UPDATE asset SET encumbrance_status = $2, updated_at = now() WHERE asset_id = $1',
+      [assetId, totalReservedAfter === 0n ? 'RELEASED' : 'LOCKED'],
+    );
+    await client.query(
+      `INSERT INTO collateral_position_movements (
+         oracle_event_row_id, oracle_event_id, movement_type, asset_id, instrument_id,
+         quantity, reserved_before, reserved_after, available_after
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        oracleEvent.id,
+        oracleEventId,
+        movementType,
+        assetId,
+        instrumentId,
+        quantity.toString(),
+        reservedBefore.toString(),
+        reservedAfter.toString(),
+        availableAfter.toString(),
+      ],
+    );
+    await this.appendAuditEvent(
+      client,
+      movementType,
+      assetId,
+      instrumentId,
+      quantity,
+      oracleEvent,
+      changed,
+    );
+    return changed;
   }
 
   private async requireOracleEvent(

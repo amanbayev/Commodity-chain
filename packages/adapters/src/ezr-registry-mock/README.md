@@ -1,6 +1,6 @@
 # PostgreSQL EZR registry mock
 
-The mock stores receipts in `mock_ezr_receipts`. Issue, lock and release transitions enqueue signed `STOCK_UPDATED`, `RECEIPT_LOCKED` and `GOODS_RELEASED` envelopes, respectively. Receipt rows, the per-source nonce increment and `mock_ezr_http_outbox` insertion commit atomically. Delivery is attempted immediately; failures remain pending for `drainOutbox()` to retry with the original `eventId`, nonce, correlation ID and idempotency key.
+The mock stores receipts in `mock_ezr_receipts`. Issue, lock and release transitions enqueue signed `STOCK_UPDATED`, `RECEIPT_LOCKED` and `GOODS_RELEASED` envelopes, respectively. `GOODS_RELEASED` includes the `redemptionId` in the canonical signed body. Receipt rows, the per-source nonce increment and `mock_ezr_http_outbox` insertion commit atomically. Delivery is attempted immediately; failures remain pending for `drainOutbox()` to retry with the original `eventId`, nonce, correlation ID and idempotency key.
 
 ## Canonical JSON and Ed25519
 
