@@ -7,6 +7,9 @@ import { OrdersPage } from '../features/investor/orders/OrdersPage.js';
 import { IssueDetailPage } from '../features/issuer/issue/IssueDetailPage.js';
 import { MyIssuesPage } from '../features/issuer/issues/MyIssuesPage.js';
 import { CreateTokenPage } from '../features/issuer/wizard/CreateTokenPage.js';
+import { ElevatorDashboardPage } from '../features/elevator/dashboard/ElevatorDashboardPage.js';
+import { ShipmentPage } from '../features/elevator/shipment/ShipmentPage.js';
+import { VerificationPage } from '../features/elevator/verification/VerificationPage.js';
 import { PlaceholderPage } from '../pages/PlaceholderPage.js';
 import { StyleguidePage } from '../pages/StyleguidePage.js';
 
@@ -67,15 +70,10 @@ export function AppRoutes() {
           path="cabinet/investor"
         />
         <Route element={<Navigate replace to="/my-issues" />} path="cabinet/issuer" />
-        <Route
-          element={
-            <PlaceholderPage
-              subtitle="Расписки, резервирование и физическая отгрузка."
-              title="Кабинет элеватора"
-            />
-          }
-          path="cabinet/elevator"
-        />
+        <Route element={<Navigate replace to="/elevator" />} path="cabinet/elevator" />
+        <Route element={<ElevatorDashboardPage />} path="elevator" />
+        <Route element={<VerificationPage />} path="elevator/verify/:requestId" />
+        <Route element={<ShipmentPage />} path="elevator/shipments/:redemptionId" />
         <Route
           element={
             <PlaceholderPage

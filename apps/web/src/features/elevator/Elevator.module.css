@@ -1,0 +1,126 @@
+.page {
+  display: grid;
+  gap: 24px;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.metric {
+  display: grid;
+  gap: 8px;
+}
+.metric strong {
+  color: var(--cc-navy-900);
+  font-size: 1.75rem;
+}
+.metric span {
+  color: var(--cc-muted);
+}
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.stack {
+  display: grid;
+  gap: 16px;
+}
+.status {
+  font-weight: 700;
+}
+.success {
+  color: var(--cc-green-700);
+}
+.danger {
+  color: var(--cc-red-700);
+}
+.warning {
+  color: var(--cc-orange-600);
+}
+.steps {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  counter-reset: step;
+}
+.step {
+  padding: 12px;
+  border-bottom: 3px solid var(--cc-border);
+  color: var(--cc-muted);
+  font-size: 0.82rem;
+}
+.step:first-child,
+.stepActive {
+  border-color: var(--cc-gold-500);
+  color: var(--cc-ink);
+  font-weight: 650;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+  margin: 0;
+}
+.facts div {
+  border-bottom: 1px solid var(--cc-border);
+  padding: 10px 0;
+}
+.facts dt {
+  color: var(--cc-muted);
+  font-size: 0.8rem;
+}
+.facts dd {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+.preview {
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  border-radius: var(--cc-radius-md);
+  background: var(--cc-navy-950);
+  color: #dcecff;
+  font-size: 0.78rem;
+}
+.check {
+  display: flex;
+  gap: 8px;
+  padding: 7px 0;
+}
+.check::before {
+  content: '✓';
+  color: var(--cc-green-600);
+  font-weight: 800;
+}
+.notice {
+  padding: 14px;
+  border: 1px solid var(--cc-gold-400);
+  border-radius: var(--cc-radius-md);
+  background: var(--cc-gold-100);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+@media (max-width: 900px) {
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .metrics,
+  .facts {
+    grid-template-columns: 1fr;
+  }
+  .steps {
+    overflow-x: auto;
+    grid-template-columns: repeat(5, 150px);
+  }
+}

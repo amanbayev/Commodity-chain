@@ -25,6 +25,14 @@ const roleDashboardLabels: Record<AuthRole, string> = {
 };
 
 export function navigationForRole(role: AuthRole): readonly NavigationItem[] {
+  if (role === 'elevator') {
+    return [
+      { icon: 'assets', label: roleDashboardLabels[role], to: '/elevator' },
+      { icon: 'documents', label: 'Запросы на проверку', to: '/elevator' },
+      { icon: 'redemption', label: 'Заявки на отгрузку', to: '/elevator' },
+      ...commonNavigation,
+    ];
+  }
   if (role === 'issuer') {
     return [
       { icon: 'assets', label: roleDashboardLabels[role], to: '/my-issues' },
