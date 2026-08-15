@@ -309,6 +309,210 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /elevators/{elevatorId}/dashboard:
+    get:
+      operationId: getElevatorDashboard
+      summary: Get the elevator operational dashboard
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/ElevatorIdPath'
+      responses:
+        '200':
+          description: Elevator dashboard read model.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElevatorDashboard'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /elevators/{elevatorId}/verification-requests:
+    get:
+      operationId: listElevatorVerificationRequests
+      summary: List receipt verification requests assigned to an elevator
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/ElevatorIdPath'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Cursor page of verification requests.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElevatorVerificationRequestPage'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /elevators/{elevatorId}/verification-requests/{requestId}:
+    get:
+      operationId: getElevatorVerificationRequest
+      summary: Get receipt and collateral data for verification
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/ElevatorIdPath'
+        - $ref: '#/components/parameters/VerificationRequestIdPath'
+      responses:
+        '200':
+          description: Verification request detail.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElevatorVerificationRequestDetail'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /elevators/{elevatorId}/verification-requests/{requestId}/reserve:
+    post:
+      operationId: reserveElevatorVerificationRequest
+      summary: Lock the existing electronic receipt through the EZR adapter
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ElevatorIdPath'
+        - $ref: '#/components/parameters/VerificationRequestIdPath'
+      responses:
+        '202':
+          description: Receipt lock event accepted by the oracle pipeline.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElevatorOracleActionResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /elevators/{elevatorId}/shipments:
+    get:
+      operationId: listElevatorShipments
+      summary: List physical-delivery redemptions assigned to an elevator
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/ElevatorIdPath'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Cursor page of elevator shipments.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElevatorShipmentPage'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /elevators/{elevatorId}/shipments/{redemptionId}:
+    get:
+      operationId: getElevatorShipment
+      summary: Get a physical-delivery shipment and reconciliation preview
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/ElevatorIdPath'
+        - $ref: '#/components/parameters/RedemptionIdPath'
+      responses:
+        '200':
+          description: Shipment detail.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElevatorShipmentDetail'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /elevators/{elevatorId}/shipments/{redemptionId}/confirm:
+    post:
+      operationId: confirmElevatorShipment
+      summary: Release the existing receipt through the EZR adapter
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ElevatorIdPath'
+        - $ref: '#/components/parameters/RedemptionIdPath'
+      responses:
+        '202':
+          description: Goods release event accepted by the oracle pipeline.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElevatorOracleActionResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  /elevators/{elevatorId}/oracle-events:
+    get:
+      operationId: listElevatorOracleEvents
+      summary: List oracle events emitted for receipts at an elevator
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/ElevatorIdPath'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Cursor page of source oracle events.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElevatorOracleEventPage'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /assets/{id}/reserve:
     post:
       tags:
@@ -872,6 +1076,29 @@ components:
       description: Asset identifier.
       schema:
         $ref: '#/components/schemas/AssetId'
+    ElevatorIdPath:
+      name: elevatorId
+      in: path
+      required: true
+      description: External identifier of the authenticated elevator.
+      schema:
+        $ref: '#/components/schemas/ExternalId'
+    VerificationRequestIdPath:
+      name: requestId
+      in: path
+      required: true
+      description: Receipt-backed verification request identifier.
+      schema:
+        type: string
+        format: uuid
+    RedemptionIdPath:
+      name: redemptionId
+      in: path
+      required: true
+      description: Physical-delivery redemption identifier.
+      schema:
+        type: string
+        format: uuid
     OrderIdPath:
       name: id
       in: path
@@ -2000,6 +2227,253 @@ components:
         - STALE
         - QUARANTINED
         - REJECTED
+    ElevatorReceiptStatus:
+      type: string
+      enum: [AVAILABLE, LOCKED, RELEASED]
+    ElevatorReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        - receiptId
+        - owner
+        - commodity
+        - quantity
+        - unit
+        - elevatorId
+        - status
+        - instrumentId
+        - createdAt
+        - updatedAt
+      properties:
+        receiptId: { type: string, format: uuid }
+        owner: { $ref: '#/components/schemas/ExternalId' }
+        commodity: { type: string, minLength: 1, maxLength: 128 }
+        quantity:
+          allOf: [{ $ref: '#/components/schemas/PositiveIntegerString' }]
+          description: Receipt quantity as an integer string in commodity minor units.
+        unit: { $ref: '#/components/schemas/UnitCode' }
+        elevatorId: { $ref: '#/components/schemas/ExternalId' }
+        status: { $ref: '#/components/schemas/ElevatorReceiptStatus' }
+        instrumentId: { $ref: '#/components/schemas/InstrumentId' }
+        redemptionId: { $ref: '#/components/schemas/ExternalId' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ElevatorVerificationStatus:
+      type: string
+      enum: [REQUIRES_REVIEW, RESERVED, RELEASED]
+    ElevatorVerificationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - applicant
+        - instrumentId
+        - commodity
+        - quantity
+        - unit
+        - status
+        - receiptStatus
+        - updatedAt
+      properties:
+        requestId: { type: string, format: uuid }
+        applicant: { $ref: '#/components/schemas/ExternalId' }
+        instrumentId: { $ref: '#/components/schemas/InstrumentId' }
+        ticker: { type: string, minLength: 1, maxLength: 32 }
+        commodity: { type: string, minLength: 1, maxLength: 128 }
+        quantity:
+          allOf: [{ $ref: '#/components/schemas/PositiveIntegerString' }]
+          description: Requested quantity as an integer string in commodity minor units.
+        unit: { $ref: '#/components/schemas/UnitCode' }
+        status: { $ref: '#/components/schemas/ElevatorVerificationStatus' }
+        receiptStatus: { $ref: '#/components/schemas/ElevatorReceiptStatus' }
+        updatedAt: { type: string, format: date-time }
+    ElevatorVerificationRequestPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ElevatorVerificationRequest' }
+        page: { $ref: '#/components/schemas/CursorPageMetadata' }
+    ElevatorDocument:
+      type: object
+      additionalProperties: false
+      required: [name, status]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        mediaType: { type: string, minLength: 1, maxLength: 128 }
+        size:
+          allOf: [{ $ref: '#/components/schemas/NonNegativeIntegerString' }]
+          description: File size as an integer string in bytes.
+        status: { type: string, enum: [PROVIDED, VERIFIED, MISSING] }
+    ElevatorVerificationCheck:
+      type: object
+      additionalProperties: false
+      required: [code, label, status]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]*$' }
+        label: { type: string, minLength: 1, maxLength: 256 }
+        status: { type: string, enum: [PASSED, PENDING, FAILED] }
+    OracleEventPayloadPreview:
+      type: object
+      additionalProperties: false
+      description: Known business fields before event identity, nonce and signature are assigned by the source.
+      required:
+        [schemaVersion, instrumentId, assetId, eventType, quantity, unit, sourceId, evidenceHash]
+      properties:
+        schemaVersion: { type: string, pattern: '^[1-9][0-9]*$' }
+        instrumentId: { $ref: '#/components/schemas/InstrumentId' }
+        assetId: { $ref: '#/components/schemas/AssetId' }
+        eventType: { $ref: '#/components/schemas/OracleEventType' }
+        quantity:
+          allOf: [{ $ref: '#/components/schemas/NonNegativeIntegerString' }]
+          description: Event quantity as an integer string in commodity minor units.
+        unit: { $ref: '#/components/schemas/UnitCode' }
+        sourceId: { $ref: '#/components/schemas/ExternalId' }
+        redemptionId: { $ref: '#/components/schemas/ExternalId' }
+        evidenceHash: { $ref: '#/components/schemas/Hash' }
+    ElevatorVerificationRequestDetail:
+      type: object
+      additionalProperties: false
+      required:
+        [request, receipt, requestedQuantity, availableQuantity, documents, checks, eventPreview]
+      properties:
+        request: { $ref: '#/components/schemas/ElevatorVerificationRequest' }
+        receipt: { $ref: '#/components/schemas/ElevatorReceipt' }
+        requestedQuantity:
+          allOf: [{ $ref: '#/components/schemas/PositiveIntegerString' }]
+          description: Requested quantity as an integer string in commodity minor units.
+        availableQuantity:
+          allOf: [{ $ref: '#/components/schemas/NonNegativeIntegerString' }]
+          description: Unencumbered receipt quantity as an integer string in commodity minor units.
+        documents:
+          type: array
+          items: { $ref: '#/components/schemas/ElevatorDocument' }
+        checks:
+          type: array
+          items: { $ref: '#/components/schemas/ElevatorVerificationCheck' }
+        eventPreview: { $ref: '#/components/schemas/OracleEventPayloadPreview' }
+    ElevatorShipment:
+      type: object
+      additionalProperties: false
+      required: [redemption, instrumentTicker, underlyingQuantity]
+      properties:
+        redemption: { $ref: '#/components/schemas/RedemptionOrder' }
+        instrumentTicker: { type: string, minLength: 1, maxLength: 32 }
+        underlyingQuantity:
+          allOf: [{ $ref: '#/components/schemas/PositiveIntegerString' }]
+          description: Physical quantity as an integer string in commodity minor units.
+    ElevatorShipmentPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ElevatorShipment' }
+        page: { $ref: '#/components/schemas/CursorPageMetadata' }
+    ElevatorShipmentChangePreview:
+      type: object
+      additionalProperties: false
+      required: [collateralBefore, collateralAfter, supplyBefore, supplyAfter]
+      properties:
+        collateralBefore:
+          allOf: [{ $ref: '#/components/schemas/NonNegativeIntegerString' }]
+          description: Collateral before release in commodity minor units.
+        collateralAfter:
+          allOf: [{ $ref: '#/components/schemas/NonNegativeIntegerString' }]
+          description: Expected collateral after release in commodity minor units.
+        supplyBefore:
+          allOf: [{ $ref: '#/components/schemas/NonNegativeIntegerString' }]
+          description: Token supply before burn in token minor units.
+        supplyAfter:
+          allOf: [{ $ref: '#/components/schemas/NonNegativeIntegerString' }]
+          description: Expected token supply after burn in token minor units.
+    ElevatorShipmentDetail:
+      type: object
+      additionalProperties: false
+      required: [shipment, receipt, changes, eventPreview]
+      properties:
+        shipment: { $ref: '#/components/schemas/ElevatorShipment' }
+        receipt: { $ref: '#/components/schemas/ElevatorReceipt' }
+        changes: { $ref: '#/components/schemas/ElevatorShipmentChangePreview' }
+        eventPreview: { $ref: '#/components/schemas/OracleEventPayloadPreview' }
+    ElevatorOracleEvent:
+      type: object
+      additionalProperties: false
+      required: [envelope, status, receivedAt]
+      properties:
+        envelope: { $ref: '#/components/schemas/OracleEventEnvelope' }
+        status: { $ref: '#/components/schemas/OracleProcessingStatus' }
+        failureCode: { $ref: '#/components/schemas/ErrorCode' }
+        failureDetails:
+          type: array
+          items: { $ref: '#/components/schemas/ErrorDetail' }
+        receivedAt: { type: string, format: date-time }
+    ElevatorOracleEventPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ElevatorOracleEvent' }
+        page: { $ref: '#/components/schemas/CursorPageMetadata' }
+    ElevatorIncident:
+      type: object
+      additionalProperties: false
+      required: [id, eventType, aggregateType, aggregateId, occurredAt]
+      properties:
+        id: { $ref: '#/components/schemas/PositiveIntegerString' }
+        eventType: { type: string, minLength: 1, maxLength: 128 }
+        aggregateType: { type: string, minLength: 1, maxLength: 128 }
+        aggregateId: { type: string, minLength: 1, maxLength: 128 }
+        message: { type: string, maxLength: 2000 }
+        occurredAt: { type: string, format: date-time }
+    ElevatorDashboard:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          elevatorId,
+          onReview,
+          reservedQuantity,
+          awaitingShipment,
+          activeReceipts,
+          verificationRequests,
+          shipments,
+          recentEvents,
+        ]
+      properties:
+        elevatorId: { $ref: '#/components/schemas/ExternalId' }
+        onReview: { type: integer, format: int32, minimum: 0 }
+        reservedQuantity:
+          allOf: [{ $ref: '#/components/schemas/NonNegativeIntegerString' }]
+          description: Total locked receipt quantity in commodity minor units.
+        awaitingShipment: { type: integer, format: int32, minimum: 0 }
+        activeReceipts: { type: integer, format: int32, minimum: 0 }
+        verificationRequests:
+          type: array
+          items: { $ref: '#/components/schemas/ElevatorVerificationRequest' }
+        shipments:
+          type: array
+          items: { $ref: '#/components/schemas/ElevatorShipment' }
+        incidents:
+          type: array
+          items: { $ref: '#/components/schemas/ElevatorIncident' }
+        recentEvents:
+          type: array
+          items: { $ref: '#/components/schemas/ElevatorOracleEvent' }
+    ElevatorOracleActionResult:
+      type: object
+      additionalProperties: false
+      required: [receipt, oracleEvent]
+      properties:
+        receipt: { $ref: '#/components/schemas/ElevatorReceipt' }
+        oracleEvent: { $ref: '#/components/schemas/ElevatorOracleEvent' }
+        redemption: { $ref: '#/components/schemas/RedemptionOrder' }
+
     OracleEventEnvelope:
       type: object
       additionalProperties: false

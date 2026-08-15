@@ -157,6 +157,142 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/elevators/{elevatorId}/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the elevator operational dashboard */
+        get: operations["getElevatorDashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/elevators/{elevatorId}/verification-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List receipt verification requests assigned to an elevator */
+        get: operations["listElevatorVerificationRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/elevators/{elevatorId}/verification-requests/{requestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get receipt and collateral data for verification */
+        get: operations["getElevatorVerificationRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/elevators/{elevatorId}/verification-requests/{requestId}/reserve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Lock the existing electronic receipt through the EZR adapter */
+        post: operations["reserveElevatorVerificationRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/elevators/{elevatorId}/shipments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List physical-delivery redemptions assigned to an elevator */
+        get: operations["listElevatorShipments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/elevators/{elevatorId}/shipments/{redemptionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a physical-delivery shipment and reconciliation preview */
+        get: operations["getElevatorShipment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/elevators/{elevatorId}/shipments/{redemptionId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Release the existing receipt through the EZR adapter */
+        post: operations["confirmElevatorShipment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/elevators/{elevatorId}/oracle-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List oracle events emitted for receipts at an elevator */
+        get: operations["listElevatorOracleEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assets/{id}/reserve": {
         parameters: {
             query?: never;
@@ -723,6 +859,151 @@ export interface components {
          * @enum {string}
          */
         OracleProcessingStatus: "RECEIVED" | "SCHEMA_VALIDATED" | "SIGNATURE_VALIDATED" | "POLICY_VALIDATED" | "APPLIED" | "DUPLICATE" | "STALE" | "QUARANTINED" | "REJECTED";
+        /** @enum {string} */
+        ElevatorReceiptStatus: "AVAILABLE" | "LOCKED" | "RELEASED";
+        ElevatorReceipt: {
+            /** Format: uuid */
+            receiptId: string;
+            owner: components["schemas"]["ExternalId"];
+            commodity: string;
+            /** @description Receipt quantity as an integer string in commodity minor units. */
+            quantity: components["schemas"]["PositiveIntegerString"];
+            unit: components["schemas"]["UnitCode"];
+            elevatorId: components["schemas"]["ExternalId"];
+            status: components["schemas"]["ElevatorReceiptStatus"];
+            instrumentId: components["schemas"]["InstrumentId"];
+            redemptionId?: components["schemas"]["ExternalId"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @enum {string} */
+        ElevatorVerificationStatus: "REQUIRES_REVIEW" | "RESERVED" | "RELEASED";
+        ElevatorVerificationRequest: {
+            /** Format: uuid */
+            requestId: string;
+            applicant: components["schemas"]["ExternalId"];
+            instrumentId: components["schemas"]["InstrumentId"];
+            ticker?: string;
+            commodity: string;
+            /** @description Requested quantity as an integer string in commodity minor units. */
+            quantity: components["schemas"]["PositiveIntegerString"];
+            unit: components["schemas"]["UnitCode"];
+            status: components["schemas"]["ElevatorVerificationStatus"];
+            receiptStatus: components["schemas"]["ElevatorReceiptStatus"];
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ElevatorVerificationRequestPage: {
+            items: components["schemas"]["ElevatorVerificationRequest"][];
+            page: components["schemas"]["CursorPageMetadata"];
+        };
+        ElevatorDocument: {
+            name: string;
+            mediaType?: string;
+            /** @description File size as an integer string in bytes. */
+            size?: components["schemas"]["NonNegativeIntegerString"];
+            /** @enum {string} */
+            status: "PROVIDED" | "VERIFIED" | "MISSING";
+        };
+        ElevatorVerificationCheck: {
+            code: string;
+            label: string;
+            /** @enum {string} */
+            status: "PASSED" | "PENDING" | "FAILED";
+        };
+        /** @description Known business fields before event identity, nonce and signature are assigned by the source. */
+        OracleEventPayloadPreview: {
+            schemaVersion: string;
+            instrumentId: components["schemas"]["InstrumentId"];
+            assetId: components["schemas"]["AssetId"];
+            eventType: components["schemas"]["OracleEventType"];
+            /** @description Event quantity as an integer string in commodity minor units. */
+            quantity: components["schemas"]["NonNegativeIntegerString"];
+            unit: components["schemas"]["UnitCode"];
+            sourceId: components["schemas"]["ExternalId"];
+            redemptionId?: components["schemas"]["ExternalId"];
+            evidenceHash: components["schemas"]["Hash"];
+        };
+        ElevatorVerificationRequestDetail: {
+            request: components["schemas"]["ElevatorVerificationRequest"];
+            receipt: components["schemas"]["ElevatorReceipt"];
+            /** @description Requested quantity as an integer string in commodity minor units. */
+            requestedQuantity: components["schemas"]["PositiveIntegerString"];
+            /** @description Unencumbered receipt quantity as an integer string in commodity minor units. */
+            availableQuantity: components["schemas"]["NonNegativeIntegerString"];
+            documents: components["schemas"]["ElevatorDocument"][];
+            checks: components["schemas"]["ElevatorVerificationCheck"][];
+            eventPreview: components["schemas"]["OracleEventPayloadPreview"];
+        };
+        ElevatorShipment: {
+            redemption: components["schemas"]["RedemptionOrder"];
+            instrumentTicker: string;
+            /** @description Physical quantity as an integer string in commodity minor units. */
+            underlyingQuantity: components["schemas"]["PositiveIntegerString"];
+        };
+        ElevatorShipmentPage: {
+            items: components["schemas"]["ElevatorShipment"][];
+            page: components["schemas"]["CursorPageMetadata"];
+        };
+        ElevatorShipmentChangePreview: {
+            /** @description Collateral before release in commodity minor units. */
+            collateralBefore: components["schemas"]["NonNegativeIntegerString"];
+            /** @description Expected collateral after release in commodity minor units. */
+            collateralAfter: components["schemas"]["NonNegativeIntegerString"];
+            /** @description Token supply before burn in token minor units. */
+            supplyBefore: components["schemas"]["NonNegativeIntegerString"];
+            /** @description Expected token supply after burn in token minor units. */
+            supplyAfter: components["schemas"]["NonNegativeIntegerString"];
+        };
+        ElevatorShipmentDetail: {
+            shipment: components["schemas"]["ElevatorShipment"];
+            receipt: components["schemas"]["ElevatorReceipt"];
+            changes: components["schemas"]["ElevatorShipmentChangePreview"];
+            eventPreview: components["schemas"]["OracleEventPayloadPreview"];
+        };
+        ElevatorOracleEvent: {
+            envelope: components["schemas"]["OracleEventEnvelope"];
+            status: components["schemas"]["OracleProcessingStatus"];
+            failureCode?: components["schemas"]["ErrorCode"];
+            failureDetails?: components["schemas"]["ErrorDetail"][];
+            /** Format: date-time */
+            receivedAt: string;
+        };
+        ElevatorOracleEventPage: {
+            items: components["schemas"]["ElevatorOracleEvent"][];
+            page: components["schemas"]["CursorPageMetadata"];
+        };
+        ElevatorIncident: {
+            id: components["schemas"]["PositiveIntegerString"];
+            eventType: string;
+            aggregateType: string;
+            aggregateId: string;
+            message?: string;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        ElevatorDashboard: {
+            elevatorId: components["schemas"]["ExternalId"];
+            /** Format: int32 */
+            onReview: number;
+            /** @description Total locked receipt quantity in commodity minor units. */
+            reservedQuantity: components["schemas"]["NonNegativeIntegerString"];
+            /** Format: int32 */
+            awaitingShipment: number;
+            /** Format: int32 */
+            activeReceipts: number;
+            verificationRequests: components["schemas"]["ElevatorVerificationRequest"][];
+            shipments: components["schemas"]["ElevatorShipment"][];
+            incidents?: components["schemas"]["ElevatorIncident"][];
+            recentEvents: components["schemas"]["ElevatorOracleEvent"][];
+        };
+        ElevatorOracleActionResult: {
+            receipt: components["schemas"]["ElevatorReceipt"];
+            oracleEvent: components["schemas"]["ElevatorOracleEvent"];
+            redemption?: components["schemas"]["RedemptionOrder"];
+        };
         OracleEventEnvelope: {
             /** Format: uuid */
             eventId: string;
@@ -1096,6 +1377,12 @@ export interface components {
         InstrumentIdNamedPath: components["schemas"]["InstrumentId"];
         /** @description Asset identifier. */
         AssetIdPath: components["schemas"]["AssetId"];
+        /** @description External identifier of the authenticated elevator. */
+        ElevatorIdPath: components["schemas"]["ExternalId"];
+        /** @description Receipt-backed verification request identifier. */
+        VerificationRequestIdPath: string;
+        /** @description Physical-delivery redemption identifier. */
+        RedemptionIdPath: string;
         /** @description Order identifier. */
         OrderIdPath: components["schemas"]["OrderId"];
         /** @description Opaque cursor returned by the previous page. */
@@ -1403,6 +1690,313 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getElevatorDashboard: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+            };
+            path: {
+                /** @description External identifier of the authenticated elevator. */
+                elevatorId: components["parameters"]["ElevatorIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Elevator dashboard read model. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElevatorDashboard"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listElevatorVerificationRequests: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor returned by the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Maximum number of audit events to return. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+            };
+            path: {
+                /** @description External identifier of the authenticated elevator. */
+                elevatorId: components["parameters"]["ElevatorIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cursor page of verification requests. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElevatorVerificationRequestPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getElevatorVerificationRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+            };
+            path: {
+                /** @description External identifier of the authenticated elevator. */
+                elevatorId: components["parameters"]["ElevatorIdPath"];
+                /** @description Receipt-backed verification request identifier. */
+                requestId: components["parameters"]["VerificationRequestIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verification request detail. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElevatorVerificationRequestDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    reserveElevatorVerificationRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+                /**
+                 * @description Stable key for this command. Reusing the key with the same canonical request
+                 *     returns the original status and body without creating another effect. Reusing
+                 *     it with a different request returns IDEMPOTENCY_KEY_REUSED.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description External identifier of the authenticated elevator. */
+                elevatorId: components["parameters"]["ElevatorIdPath"];
+                /** @description Receipt-backed verification request identifier. */
+                requestId: components["parameters"]["VerificationRequestIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Receipt lock event accepted by the oracle pipeline. */
+            202: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElevatorOracleActionResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listElevatorShipments: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor returned by the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Maximum number of audit events to return. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+            };
+            path: {
+                /** @description External identifier of the authenticated elevator. */
+                elevatorId: components["parameters"]["ElevatorIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cursor page of elevator shipments. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElevatorShipmentPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getElevatorShipment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+            };
+            path: {
+                /** @description External identifier of the authenticated elevator. */
+                elevatorId: components["parameters"]["ElevatorIdPath"];
+                /** @description Physical-delivery redemption identifier. */
+                redemptionId: components["parameters"]["RedemptionIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Shipment detail. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElevatorShipmentDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    confirmElevatorShipment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+                /**
+                 * @description Stable key for this command. Reusing the key with the same canonical request
+                 *     returns the original status and body without creating another effect. Reusing
+                 *     it with a different request returns IDEMPOTENCY_KEY_REUSED.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description External identifier of the authenticated elevator. */
+                elevatorId: components["parameters"]["ElevatorIdPath"];
+                /** @description Physical-delivery redemption identifier. */
+                redemptionId: components["parameters"]["RedemptionIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Goods release event accepted by the oracle pipeline. */
+            202: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElevatorOracleActionResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listElevatorOracleEvents: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor returned by the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Maximum number of audit events to return. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+            };
+            path: {
+                /** @description External identifier of the authenticated elevator. */
+                elevatorId: components["parameters"]["ElevatorIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cursor page of source oracle events. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElevatorOracleEventPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalServerError"];
         };
     };
