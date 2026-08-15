@@ -1,0 +1,9 @@
+.error {
+  color: var(--cc-red-700);
+  background: var(--cc-red-100);
+  border-radius: var(--cc-radius-sm);
+  padding: 12px;
+}
+.loading {
+  color: var(--cc-muted);
+}

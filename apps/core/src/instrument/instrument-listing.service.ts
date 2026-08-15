@@ -8,6 +8,7 @@ import type {
   CollateralReservedDomainEvent,
   CreateInstrumentDraftCommand,
   InstrumentDraftResult,
+  InstrumentMarketPage,
   InstrumentSubmissionResult,
   InternalTransitionCommand,
   PublicPassportResult,
@@ -62,6 +63,14 @@ interface PassportRow extends QueryResultRow {
   passport_hash: string | null;
   submitted_at: Date | string | null;
   published_at: Date | string | null;
+}
+
+interface MarketInstrumentRow extends InstrumentRow {
+  passport: Readonly<Record<string, unknown>>;
+  available_supply: string;
+  trading_volume_24h: string;
+  last_trade_price: string | null;
+  price_change_bps: string | null;
 }
 
 interface DomainEventIdentity {
@@ -454,6 +463,122 @@ export class InstrumentListingService {
         updatedAt: toIso(row.position_updated_at),
       })),
       publishedAt: toIso(passport.published_at),
+    };
+  }
+
+  public async listMarketInstruments(
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<InstrumentMarketPage> {
+    const pageCursor = decodeMarketCursor(cursor);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+      throw validationError('limit', 'limit must be an integer between 1 and 200');
+    }
+    const observedAt = this.now().toISOString();
+    const result = await this.pool.query<MarketInstrumentRow>(
+      `
+        WITH public_instruments AS (
+          SELECT
+            instrument.*,
+            passport.passport
+          FROM instrument
+          JOIN LATERAL (
+            SELECT version, passport
+            FROM instrument_passport_versions
+            WHERE instrument_id = instrument.id AND published_at IS NOT NULL
+            ORDER BY version DESC
+            LIMIT 1
+          ) AS passport ON true
+          WHERE ($1::timestamptz IS NULL OR (instrument.created_at, instrument.id) < ($1::timestamptz, $2::uuid))
+          ORDER BY instrument.created_at DESC, instrument.id DESC
+          LIMIT $4
+        )
+        SELECT
+          public_instruments.id::text,
+          public_instruments.type,
+          public_instruments.legal_nature::text,
+          public_instruments.status::text,
+          public_instruments.currency,
+          public_instruments.unit,
+          public_instruments.unit_per_token::text,
+          public_instruments.supply_cap::text,
+          public_instruments.circulating_supply::text,
+          public_instruments.version::text,
+          public_instruments.passport_hash,
+          public_instruments.suspended_from_status::text,
+          public_instruments.extensions,
+          public_instruments.created_at,
+          public_instruments.updated_at,
+          public_instruments.passport,
+          COALESCE(sell_orders.available_supply, 0)::text AS available_supply,
+          COALESCE(volume.trading_volume_24h, 0)::text AS trading_volume_24h,
+          latest.price::text AS last_trade_price,
+          CASE
+            WHEN latest.price IS NULL OR baseline.price IS NULL OR baseline.price = 0 THEN NULL
+            ELSE trunc((latest.price - baseline.price) * 10000 / baseline.price)::text
+          END AS price_change_bps
+        FROM public_instruments
+        LEFT JOIN LATERAL (
+          SELECT sum(open_quantity) AS available_supply
+          FROM orders
+          WHERE instrument_id = public_instruments.id
+            AND side = 'SELL'
+            AND status IN ('OPEN', 'PARTIALLY_FILLED')
+        ) AS sell_orders ON true
+        LEFT JOIN LATERAL (
+          SELECT sum(price * quantity) AS trading_volume_24h
+          FROM trades
+          WHERE instrument_id = public_instruments.id
+            AND executed_at >= $3::timestamptz - interval '24 hours'
+        ) AS volume ON true
+        LEFT JOIN LATERAL (
+          SELECT price
+          FROM trades
+          WHERE instrument_id = public_instruments.id
+          ORDER BY executed_at DESC, trade_id DESC
+          LIMIT 1
+        ) AS latest ON true
+        LEFT JOIN LATERAL (
+          SELECT price
+          FROM trades
+          WHERE instrument_id = public_instruments.id
+            AND executed_at <= $3::timestamptz - interval '24 hours'
+          ORDER BY executed_at DESC, trade_id DESC
+          LIMIT 1
+        ) AS baseline ON true
+        ORDER BY public_instruments.created_at DESC, public_instruments.id DESC
+      `,
+      [pageCursor?.createdAt ?? null, pageCursor?.id ?? null, observedAt, limit + 1],
+    );
+    const hasMore = result.rows.length > limit;
+    const rows = result.rows.slice(0, limit);
+    const items = rows.map((row) => {
+      const passport = assertCompletePassport(passportFromJson(row.passport));
+      const tickerValue = row.extensions['ticker'];
+      const ticker =
+        typeof tickerValue === 'string' && /^[A-Z0-9][A-Z0-9._-]{0,31}$/u.test(tickerValue)
+          ? tickerValue
+          : undefined;
+      return {
+        instrument: mapInstrument(row),
+        ...(ticker === undefined ? {} : { ticker }),
+        name: `${passport.underlyingAsset.commodity} ${passport.underlyingAsset.grade}`,
+        ...(row.last_trade_price === null ? {} : { lastTradePrice: row.last_trade_price }),
+        ...(row.price_change_bps === null ? {} : { priceChangeBps: row.price_change_bps }),
+        availableSupply: row.available_supply,
+        tradingVolume24h: row.trading_volume_24h,
+      };
+    });
+    const lastRow = rows.at(-1);
+    return {
+      items,
+      page: {
+        limit,
+        hasMore,
+        ...(hasMore && lastRow !== undefined
+          ? { nextCursor: encodeMarketCursor(toIso(lastRow.created_at), lastRow.id) }
+          : {}),
+      },
     };
   }
 
@@ -911,6 +1036,32 @@ function safeVersion(value: string): number {
 
 function toIso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function encodeMarketCursor(createdAt: string, id: string): string {
+  return Buffer.from(JSON.stringify({ createdAt, id }), 'utf8').toString('base64url');
+}
+
+function decodeMarketCursor(cursor: string | undefined): { createdAt: string; id: string } | null {
+  if (cursor === undefined) return null;
+  try {
+    const value: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      !('createdAt' in value) ||
+      !('id' in value) ||
+      typeof value.createdAt !== 'string' ||
+      Number.isNaN(Date.parse(value.createdAt)) ||
+      typeof value.id !== 'string' ||
+      !UUID_PATTERN.test(value.id)
+    ) {
+      throw new Error('invalid cursor');
+    }
+    return { createdAt: new Date(value.createdAt).toISOString(), id: value.id };
+  } catch {
+    throw validationError('cursor', 'cursor is invalid');
+  }
 }
 
 function requireRow<T>(value: T | undefined, message: string): T {

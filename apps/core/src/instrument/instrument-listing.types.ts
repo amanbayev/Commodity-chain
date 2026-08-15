@@ -79,3 +79,22 @@ export interface PublicPassportResult {
   readonly collateralPositions: readonly Readonly<Record<string, unknown>>[];
   readonly publishedAt: string;
 }
+
+export interface InstrumentMarketItem {
+  readonly instrument: InstrumentView;
+  readonly ticker?: string;
+  readonly name: string;
+  readonly lastTradePrice?: string;
+  readonly priceChangeBps?: string;
+  readonly availableSupply: string;
+  readonly tradingVolume24h: string;
+}
+
+export interface InstrumentMarketPage {
+  readonly items: readonly InstrumentMarketItem[];
+  readonly page: {
+    readonly nextCursor?: string;
+    readonly limit: number;
+    readonly hasMore: boolean;
+  };
+}

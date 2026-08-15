@@ -22,7 +22,7 @@ describe('application layout', () => {
 
     expect(screen.getByRole('navigation', { name: 'Основная навигация' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Роль' })).toHaveValue('investor');
-    expect(screen.getByRole('heading', { level: 1, name: 'Рынок' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Обзор рынка' })).toBeInTheDocument();
     expect(screen.getByText('Кабинет инвестора')).toBeInTheDocument();
   });
 });

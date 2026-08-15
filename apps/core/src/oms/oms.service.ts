@@ -35,6 +35,7 @@ import type {
   OmsErrorBody,
   OmsExecutionResult,
   OrderBookView,
+  OrderPage,
   OrderView,
   PlaceOrderCommand,
   SettlementView,
@@ -327,6 +328,57 @@ export class OmsService {
           : resultFromError(matchingRejection(rejection), command.correlationId);
       }),
     );
+  }
+
+  public async listOrders(
+    participantId: string,
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<OrderPage> {
+    assertUuid(participantId, 'participantId');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+      throw validationError('limit', 'limit must be an integer between 1 and 200');
+    }
+    const pageCursor = decodeOrderCursor(cursor);
+    const client = await this.pool.connect();
+    try {
+      const participant = await client.query('SELECT 1 FROM party WHERE id = $1', [participantId]);
+      if (participant.rowCount !== 1) {
+        throw new OmsError(
+          'PARTICIPANT_NOT_FOUND',
+          `Participant ${participantId} was not found`,
+          404,
+        );
+      }
+      const result = await client.query<QueryResultRow & { id: string; created_at: Date | string }>(
+        `
+          SELECT id::text, created_at
+          FROM orders
+          WHERE party_id = $1
+            AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))
+          ORDER BY created_at DESC, id DESC
+          LIMIT $4
+        `,
+        [participantId, pageCursor?.createdAt ?? null, pageCursor?.id ?? null, limit + 1],
+      );
+      const hasMore = result.rows.length > limit;
+      const rows = result.rows.slice(0, limit);
+      const items: OrderView[] = [];
+      for (const row of rows) items.push(await this.readOrderView(client, row.id));
+      const lastRow = rows.at(-1);
+      return {
+        items,
+        page: {
+          limit,
+          hasMore,
+          ...(hasMore && lastRow !== undefined
+            ? { nextCursor: encodeOrderCursor(toIso(lastRow.created_at), lastRow.id) }
+            : {}),
+        },
+      };
+    } finally {
+      client.release();
+    }
   }
 
   public async orderBook(instrumentId: string, depth: number): Promise<OrderBookView> {
@@ -1353,6 +1405,32 @@ function safeVersion(value: string): number {
 
 function toIso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function encodeOrderCursor(createdAt: string, id: string): string {
+  return Buffer.from(JSON.stringify({ createdAt, id }), 'utf8').toString('base64url');
+}
+
+function decodeOrderCursor(cursor: string | undefined): { createdAt: string; id: string } | null {
+  if (cursor === undefined) return null;
+  try {
+    const value: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      !('createdAt' in value) ||
+      !('id' in value) ||
+      typeof value.createdAt !== 'string' ||
+      Number.isNaN(Date.parse(value.createdAt)) ||
+      typeof value.id !== 'string' ||
+      !UUID_PATTERN.test(value.id)
+    ) {
+      throw new Error('invalid cursor');
+    }
+    return { createdAt: new Date(value.createdAt).toISOString(), id: value.id };
+  } catch {
+    throw validationError('cursor', 'cursor is invalid');
+  }
 }
 
 function requireRow<T>(value: T | undefined, message: string): T {

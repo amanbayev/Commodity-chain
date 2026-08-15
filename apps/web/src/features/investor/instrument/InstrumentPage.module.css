@@ -1,0 +1,106 @@
+.loading {
+  color: var(--cc-muted);
+}
+.error {
+  color: var(--cc-red-700);
+  background: var(--cc-red-100);
+  border-radius: var(--cc-radius-sm);
+  padding: 12px;
+}
+.hero {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(320px, 1.3fr);
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.quote {
+  display: grid;
+  gap: 8px;
+}
+.quote span,
+.quote small {
+  color: var(--cc-muted);
+}
+.quote strong {
+  color: var(--cc-ink);
+  font-size: 2rem;
+}
+.collateral {
+  display: grid;
+  gap: 16px;
+}
+.collateral > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--cc-green-700);
+  font-size: 1.05rem;
+}
+.shield {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: white;
+  background: var(--cc-green-600);
+}
+.collateral dl,
+.overview {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.55fr) 1fr;
+  gap: 9px 18px;
+  margin: 0;
+}
+.collateral dt,
+.overview dt {
+  color: var(--cc-muted);
+}
+.collateral dd,
+.overview dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+.tabs {
+  display: flex;
+  gap: 28px;
+  border-bottom: 1px solid var(--cc-border);
+  margin: -8px 0 22px;
+}
+.tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 12px 2px;
+  color: var(--cc-muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tabs button[aria-selected='true'] {
+  color: var(--cc-teal-700);
+  border-color: var(--cc-teal-600);
+}
+.overview {
+  padding: 4px 8px 16px;
+}
+@media (max-width: 980px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 680px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+  .tabs {
+    gap: 14px;
+    overflow-x: auto;
+  }
+}

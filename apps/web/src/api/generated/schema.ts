@@ -4,6 +4,28 @@
  */
 
 export interface paths {
+    "/instruments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List public market instruments
+         * @description Returns instruments with a published passport together with market facts derived
+         *     from persisted orders and trades. Optional market fields are omitted when no
+         *     observation exists; clients must not infer or fabricate them.
+         */
+        get: operations["listMarketInstruments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instruments/drafts": {
         parameters: {
             query?: never;
@@ -143,7 +165,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List the authenticated participant's orders
+         * @description Returns orders owned by X-Participant-Id in reverse creation order.
+         */
+        get: operations["listParticipantOrders"];
         put?: never;
         /**
          * Create an order
@@ -376,6 +402,25 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             extensions?: components["schemas"]["Extensions"];
+        };
+        InstrumentMarketItem: {
+            instrument: components["schemas"]["Instrument"];
+            /** @description Optional public ticker sourced from instrument extensions.ticker. */
+            ticker?: string;
+            /** @description Public display name derived from the underlying commodity and grade. */
+            name: string;
+            /** @description Latest execution price as an integer string in currency minor units per token. */
+            lastTradePrice?: components["schemas"]["PositiveIntegerString"];
+            /** @description Signed price change over 24 hours in integer basis points; 100 bps equals 1 percent. */
+            priceChangeBps?: string;
+            /** @description Aggregate open SELL quantity as an integer string in token minor units. */
+            availableSupply: components["schemas"]["NonNegativeIntegerString"];
+            /** @description Executed notional over 24 hours as an integer string in currency minor units. */
+            tradingVolume24h: components["schemas"]["NonNegativeIntegerString"];
+        };
+        InstrumentMarketPage: {
+            items: components["schemas"]["InstrumentMarketItem"][];
+            page: components["schemas"]["CursorPageMetadata"];
         };
         InstrumentDraftCreate: {
             type: components["schemas"]["InstrumentType"];
@@ -636,6 +681,10 @@ export interface components {
             closedAt?: string;
             extensions?: components["schemas"]["Extensions"];
         } & unknown;
+        OrderPage: {
+            items: components["schemas"]["Order"][];
+            page: components["schemas"]["CursorPageMetadata"];
+        };
         OrderBookLevel: {
             /** @description Aggregated price level as an integer string in currency minor units per token. */
             price: components["schemas"]["PositiveIntegerString"];
@@ -952,6 +1001,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listMarketInstruments: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor returned by the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Maximum number of audit events to return. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cursor page of public market instruments. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstrumentMarketPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     createInstrumentDraft: {
         parameters: {
             query?: never;
@@ -1182,6 +1262,42 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listParticipantOrders: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor returned by the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Maximum number of audit events to return. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description UUID of the authenticated trading participant on whose behalf the command runs. */
+                "X-Participant-Id": components["parameters"]["XParticipantId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cursor page of participant orders. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };
     };

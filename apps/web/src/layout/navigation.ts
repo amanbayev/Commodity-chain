@@ -10,6 +10,7 @@ export interface NavigationItem {
 const commonNavigation: readonly NavigationItem[] = [
   { icon: 'market', label: 'Рынок', to: '/market' },
   { icon: 'assets', label: 'Мои активы', to: '/assets' },
+  { icon: 'documents', label: 'Заявки', to: '/orders' },
   { icon: 'create', label: 'Создать токен', to: '/create-token' },
   { icon: 'terminal', label: 'Торговый терминал', to: '/terminal' },
   { icon: 'redemption', label: 'Погашение', to: '/redemption' },

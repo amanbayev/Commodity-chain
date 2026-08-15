@@ -21,6 +21,7 @@ export interface DataTableProps<T> {
   getRowId: (row: T) => string;
   initialPageSize?: number;
   loading?: boolean;
+  onRowClick?: (row: T) => void;
   pageSizeOptions?: readonly number[];
 }
 
@@ -54,6 +55,7 @@ export function DataTable<T>({
   getRowId,
   initialPageSize = 5,
   loading = false,
+  onRowClick,
   pageSizeOptions = [5, 10, 20],
 }: DataTableProps<T>) {
   const [page, setPage] = useState(0);
@@ -137,7 +139,25 @@ export function DataTable<T>({
               </tr>
             ) : (
               visibleRows.map((row) => (
-                <tr key={getRowId(row)}>
+                <tr
+                  className={onRowClick === undefined ? undefined : styles.clickable}
+                  key={getRowId(row)}
+                  onClick={
+                    onRowClick === undefined
+                      ? undefined
+                      : () => {
+                          onRowClick(row);
+                        }
+                  }
+                  onKeyDown={
+                    onRowClick === undefined
+                      ? undefined
+                      : (event) => {
+                          if (event.key === 'Enter' || event.key === ' ') onRowClick(row);
+                        }
+                  }
+                  tabIndex={onRowClick === undefined ? undefined : 0}
+                >
                   {columns.map((column) => (
                     <td className={styles[column.align ?? 'left']} key={column.id}>
                       {column.cell(row)}

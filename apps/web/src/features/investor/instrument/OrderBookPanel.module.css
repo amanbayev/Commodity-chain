@@ -1,0 +1,47 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.grid table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.grid caption {
+  padding-bottom: 10px;
+  font-weight: 700;
+  text-align: left;
+}
+.grid th,
+.grid td {
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--cc-border);
+  text-align: right;
+}
+.grid th:first-child,
+.grid td:first-child {
+  text-align: left;
+}
+.grid th {
+  color: var(--cc-muted);
+  font-size: 0.7rem;
+}
+.bids caption,
+.bids td:first-child {
+  color: var(--cc-green-700);
+}
+.asks caption,
+.asks td:first-child {
+  color: var(--cc-red-700);
+}
+.sequence {
+  margin: 14px 0 0;
+  color: var(--cc-muted);
+  font-size: 0.7rem;
+}
+@media (max-width: 650px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

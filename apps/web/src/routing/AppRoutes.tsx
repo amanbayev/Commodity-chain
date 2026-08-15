@@ -1,6 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AppShell } from '../layout/AppShell.js';
+import { InstrumentPage } from '../features/investor/instrument/InstrumentPage.js';
+import { MarketPage } from '../features/investor/market/MarketPage.js';
+import { OrdersPage } from '../features/investor/orders/OrdersPage.js';
 import { PlaceholderPage } from '../pages/PlaceholderPage.js';
 import { StyleguidePage } from '../pages/StyleguidePage.js';
 
@@ -9,15 +12,9 @@ export function AppRoutes() {
     <Routes>
       <Route element={<AppShell />}>
         <Route element={<Navigate replace to="/market" />} index />
-        <Route
-          element={
-            <PlaceholderPage
-              subtitle="Обзор токенизированных товарных инструментов."
-              title="Рынок"
-            />
-          }
-          path="market"
-        />
+        <Route element={<MarketPage />} path="market" />
+        <Route element={<InstrumentPage />} path="market/:instrumentId" />
+        <Route element={<OrdersPage />} path="orders" />
         <Route
           element={
             <PlaceholderPage
