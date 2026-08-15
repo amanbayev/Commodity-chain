@@ -1,0 +1,136 @@
+.frame {
+  overflow: hidden;
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-md);
+  background: var(--cc-surface);
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table caption {
+  padding: 14px 16px;
+  color: var(--cc-ink);
+  font-weight: 700;
+  text-align: left;
+}
+
+.table th {
+  height: 44px;
+  padding: 10px 16px;
+  color: var(--cc-muted);
+  background: var(--cc-surface-muted);
+  border-bottom: 1px solid var(--cc-border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.table td {
+  height: 52px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--cc-border);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr:hover td {
+  background: color-mix(in srgb, var(--cc-gold-100) 45%, white);
+}
+
+.left {
+  text-align: left;
+}
+.right {
+  text-align: right;
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sortIcon {
+  color: var(--cc-border-strong);
+}
+.sortActive {
+  color: var(--cc-gold-600);
+}
+
+.state {
+  height: 120px !important;
+  color: var(--cc-muted);
+  text-align: center;
+}
+
+.pagination {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 8px 12px;
+  color: var(--cc-muted);
+  background: var(--cc-surface-muted);
+  border-top: 1px solid var(--cc-border);
+  font-size: 0.75rem;
+}
+
+.pageSize {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pageSize select {
+  padding: 5px 24px 5px 7px;
+  color: var(--cc-text);
+  background: var(--cc-surface);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-sm);
+}
+
+.pageButtons {
+  display: flex;
+  gap: 4px;
+}
+
+.pageButtons button {
+  width: 30px;
+  height: 30px;
+  color: var(--cc-navy-900);
+  background: var(--cc-surface);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-sm);
+  cursor: pointer;
+}
+
+.pageButtons button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .pageSize {
+    display: none;
+  }
+  .pagination {
+    justify-content: space-between;
+  }
+}

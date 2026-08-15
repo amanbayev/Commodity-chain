@@ -1,0 +1,21 @@
+.placeholder {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+  align-content: center;
+  color: var(--cc-muted);
+  text-align: center;
+}
+.placeholder span {
+  color: var(--cc-gold-500);
+  font-size: 4rem;
+  transform: rotate(45deg);
+}
+.placeholder h2 {
+  margin: 4px 0 8px;
+  color: var(--cc-ink);
+}
+.placeholder p {
+  max-width: 520px;
+  margin: 0;
+}

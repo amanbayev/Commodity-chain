@@ -16,6 +16,8 @@
     "db:rollback": "dbmate --migrations-dir ops/migrations down",
     "db:status": "dbmate --migrations-dir ops/migrations status",
     "format": "prettier --write .",
+    "gen:api": "pnpm --filter @commodity-chain/web gen:api",
+    "gen:api:check": "pnpm gen:api && git diff --exit-code -- apps/web/src/api/generated/schema.ts",
     "lint": "eslint . && prettier --check .",
     "migrate:check": "dbmate --migrations-dir ops/migrations up",
     "reconcile:supply": "node --experimental-strip-types ops/reconcile-supply.ts",

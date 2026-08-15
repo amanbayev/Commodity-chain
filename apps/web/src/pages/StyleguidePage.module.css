@@ -1,0 +1,43 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.full {
+  grid-column: 1 / -1;
+}
+.row,
+.badges,
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.badges {
+  align-items: flex-start;
+}
+.swatch {
+  display: grid;
+  min-width: 120px;
+  gap: 5px;
+  color: var(--cc-text);
+  font-size: 0.75rem;
+}
+.swatch span {
+  width: 100%;
+  height: 54px;
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-sm);
+}
+.swatch code {
+  color: var(--cc-muted);
+}
+
+@media (max-width: 760px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .full {
+    grid-column: auto;
+  }
+}
