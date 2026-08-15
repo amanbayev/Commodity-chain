@@ -21,6 +21,8 @@ import type {
   SubmitInstrumentCommand,
   UpdateInstrumentDraftCommand,
 } from './instrument-listing.types.js';
+import { rowToInstrument } from './instrument-row.mapper.js';
+import type { InstrumentDatabaseRow } from './instrument-row.mapper.js';
 import {
   assertCompletePassport,
   hashPassport,
@@ -29,7 +31,7 @@ import {
   passportToJson,
   parsePassportDraft,
 } from './instrument-passport.js';
-import type { InstrumentView, LegalNature, PassportDraft } from './instrument-passport.js';
+import type { InstrumentView, PassportDraft } from './instrument-passport.js';
 import {
   InvalidInstrumentTransitionError,
   isInstrumentStatus,
@@ -42,22 +44,9 @@ const CODE_PATTERN = /^[A-Z][A-Z0-9_]*$/u;
 const CURRENCY_PATTERN = /^[A-Z]{3}$/u;
 const MAX_NUMERIC_38 = 10n ** 38n - 1n;
 
-interface InstrumentRow extends QueryResultRow {
-  id: string;
-  type: string;
-  legal_nature: LegalNature;
-  status: string;
-  currency: string;
-  unit: string;
-  unit_per_token: string;
-  supply_cap: string;
-  circulating_supply: string;
-  version: string;
+interface InstrumentRow extends InstrumentDatabaseRow {
   passport_hash: string | null;
   suspended_from_status: string | null;
-  extensions: Readonly<Record<string, unknown>>;
-  created_at: Date | string;
-  updated_at: Date | string;
   issuer_id: string;
 }
 
@@ -154,7 +143,7 @@ export class InstrumentListingService {
         occurredAt,
         payload: { version: '1' },
       });
-      return { instrument: mapInstrument(instrument), passport: passportJson, version: 1 };
+      return { instrument: rowToInstrument(instrument), passport: passportJson, version: 1 };
     });
   }
 
@@ -210,7 +199,7 @@ export class InstrumentListingService {
         payload: { version: instrument.version },
       });
       return {
-        instrument: mapInstrument(
+        instrument: rowToInstrument(
           requireRow(updated.rows[0], 'Updated instrument was not returned'),
         ),
         passport: passportJson,
@@ -318,7 +307,7 @@ export class InstrumentListingService {
 
       const updated = await this.readInstrument(client, instrument.id);
       return {
-        instrument: mapInstrument(updated),
+        instrument: rowToInstrument(updated),
         passport: passportToJson(passport),
         passportHash,
         version: safeVersion(instrument.version),
@@ -363,11 +352,11 @@ export class InstrumentListingService {
     const last = rows.at(-1);
     return {
       items: rows.map((row) => ({
-        instrument: mapInstrument(row),
+        instrument: rowToInstrument(row),
         passport: row.passport,
         ...(row.passport_hash === null ? {} : { passportHash: row.passport_hash }),
         version: safeVersion(row.version),
-        verifiedAvailable: row.verified_available,
+        verifiedAvailable: BigInt(row.verified_available),
       })),
       page: {
         limit,
@@ -396,12 +385,12 @@ export class InstrumentListingService {
     const positions = await this.readCollateralPositions(instrument.id);
     const verified = await this.collateral.verifiedAvailable(instrument.id);
     return {
-      instrument: mapInstrument(instrument),
+      instrument: rowToInstrument(instrument),
       passport: current.passport,
       ...(current.passport_hash === null ? {} : { passportHash: current.passport_hash }),
       version: safeVersion(current.version),
       collateralPositions: positions,
-      verifiedAvailable: verified.toString(),
+      verifiedAvailable: verified,
     };
   }
 
@@ -481,7 +470,7 @@ export class InstrumentListingService {
       });
       const updated = await this.readInstrument(client, instrument.id);
       return {
-        instrument: mapInstrument(updated),
+        instrument: rowToInstrument(updated),
         passport: passportJson,
         version: safeVersion(nextVersion.toString()),
       };
@@ -511,7 +500,7 @@ export class InstrumentListingService {
         passportVersion: BigInt(instrument.version),
         occurredAt: this.now().toISOString(),
       });
-      return mapInstrument(await this.readInstrument(client, instrument.id));
+      return rowToInstrument(await this.readInstrument(client, instrument.id));
     });
   }
 
@@ -612,7 +601,7 @@ export class InstrumentListingService {
     );
 
     return {
-      instrument: mapInstrument(instrument),
+      instrument: rowToInstrument(instrument),
       passport: passport.passport,
       passportHash: passport.passport_hash,
       version: safeVersion(passport.version),
@@ -620,7 +609,7 @@ export class InstrumentListingService {
         assetId: row.asset_id,
         class: row.class,
         owner: row.owner,
-        quantity: row.asset_quantity,
+        quantity: BigInt(row.asset_quantity),
         unit: row.asset_unit,
         location: row.location,
         encumbranceStatus: row.encumbrance_status,
@@ -628,8 +617,8 @@ export class InstrumentListingService {
       collateralPositions: collateral.rows.map((row) => ({
         assetId: row.asset_id,
         instrumentId,
-        reserved: row.reserved,
-        available: row.available,
+        reserved: BigInt(row.reserved),
+        available: BigInt(row.available),
         unit: row.asset_unit,
         verifierProofs: row.verifier_proofs,
         updatedAt: toIso(row.position_updated_at),
@@ -732,13 +721,13 @@ export class InstrumentListingService {
           ? tickerValue
           : undefined;
       return {
-        instrument: mapInstrument(row),
+        instrument: rowToInstrument(row),
         ...(ticker === undefined ? {} : { ticker }),
         name: `${passport.underlyingAsset.commodity} ${passport.underlyingAsset.grade}`,
-        ...(row.last_trade_price === null ? {} : { lastTradePrice: row.last_trade_price }),
-        ...(row.price_change_bps === null ? {} : { priceChangeBps: row.price_change_bps }),
-        availableSupply: row.available_supply,
-        tradingVolume24h: row.trading_volume_24h,
+        ...(row.last_trade_price === null ? {} : { lastTradePrice: BigInt(row.last_trade_price) }),
+        ...(row.price_change_bps === null ? {} : { priceChangeBps: BigInt(row.price_change_bps) }),
+        availableSupply: BigInt(row.available_supply),
+        tradingVolume24h: BigInt(row.trading_volume_24h),
       };
     });
     const lastRow = rows.at(-1);
@@ -868,7 +857,7 @@ export class InstrumentListingService {
       }
 
       return {
-        instrument: mapInstrument(await this.readInstrument(client, instrument.id)),
+        instrument: rowToInstrument(await this.readInstrument(client, instrument.id)),
         passportVersion: safeVersion(passport.version),
         decision,
         distinctApprovalCount: approvalCount,
@@ -1032,8 +1021,8 @@ export class InstrumentListingService {
     return result.rows.map((row) => ({
       assetId: row.asset_id,
       instrumentId,
-      reserved: row.reserved,
-      available: row.available,
+      reserved: BigInt(row.reserved),
+      available: BigInt(row.available),
       unit: row.unit,
       verifierProofs: row.verifier_proofs,
       updatedAt: toIso(row.updated_at),
@@ -1109,27 +1098,6 @@ const INSTRUMENT_COLUMNS = `
   created_at,
   updated_at
 `;
-
-function mapInstrument(row: InstrumentRow): InstrumentView {
-  if (!isInstrumentStatus(row.status)) {
-    throw new Error(`Unknown persisted instrument status ${row.status}`);
-  }
-  return {
-    id: row.id,
-    type: row.type,
-    legalNature: row.legal_nature,
-    status: row.status,
-    currency: row.currency,
-    unit: row.unit,
-    unitPerToken: row.unit_per_token,
-    supplyCap: row.supply_cap,
-    circulatingSupply: row.circulating_supply,
-    version: safeVersion(row.version),
-    createdAt: toIso(row.created_at),
-    updatedAt: toIso(row.updated_at),
-    extensions: row.extensions,
-  };
-}
 
 function validateCreateDraft(command: CreateInstrumentDraftCommand): void {
   validateCommonCommand(randomUUID(), command.actorId, command.correlationId);

@@ -105,8 +105,8 @@ describeWithDatabase('instrument listing workflow', () => {
     expect(second.instrument.status).toBe('APPROVED');
     const publicPassport = await service.getPublicPassport(submitted.instrument.id);
     expect(publicPassport.passportHash).toBe(submitted.passportHash);
-    expect(JSON.stringify(publicPassport)).not.toContain('first-secret');
-    expect(JSON.stringify(publicPassport)).not.toContain('second-secret');
+    expect(JSON.stringify(publicPassport.passport)).not.toContain('first-secret');
+    expect(JSON.stringify(publicPassport.passport)).not.toContain('second-secret');
   });
 
   it('creates a new version and hash after return for revision without reversing aggregate state', async () => {

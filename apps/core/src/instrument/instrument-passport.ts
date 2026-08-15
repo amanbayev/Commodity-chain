@@ -106,9 +106,9 @@ export interface InstrumentView {
   readonly status: InstrumentStatus;
   readonly currency: string;
   readonly unit: string;
-  readonly unitPerToken: string;
-  readonly supplyCap: string;
-  readonly circulatingSupply: string;
+  readonly unitPerToken: bigint;
+  readonly supplyCap: bigint;
+  readonly circulatingSupply: bigint;
   readonly version: number;
   readonly createdAt: string;
   readonly updatedAt: string;

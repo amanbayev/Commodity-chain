@@ -2,6 +2,7 @@ import { Body, Controller, Get, Headers, Param, Patch, Post, Query, Res } from '
 
 import { InstrumentListingError } from './instrument-listing.errors.js';
 import { InstrumentListingService } from './instrument-listing.service.js';
+import { instrumentResponseToJson } from './instrument-response.mapper.js';
 import type {
   CreateInstrumentDraftCommand,
   UpdateInstrumentDraftCommand,
@@ -155,7 +156,7 @@ export class InstrumentController {
   ): Promise<unknown> {
     response.setHeader('X-Correlation-Id', correlationId);
     try {
-      const body = await operation();
+      const body = instrumentResponseToJson(await operation());
       response.status(successStatus);
       return body;
     } catch (error: unknown) {
