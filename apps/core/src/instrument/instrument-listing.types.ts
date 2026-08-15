@@ -22,6 +22,11 @@ export interface SubmitInstrumentCommand {
   readonly correlationId: string;
 }
 
+export interface UpdateInstrumentDraftCommand extends CreateInstrumentDraftCommand {
+  readonly instrumentId: string;
+  readonly version: bigint;
+}
+
 export interface ReviewCommand {
   readonly instrumentId: string;
   readonly operatorId: string;
@@ -97,4 +102,28 @@ export interface InstrumentMarketPage {
     readonly limit: number;
     readonly hasMore: boolean;
   };
+}
+
+export interface IssuerInstrumentResult {
+  readonly instrument: InstrumentView;
+  readonly passport: Readonly<Record<string, unknown>>;
+  readonly passportHash?: string;
+  readonly version: number;
+  readonly collateralPositions: readonly Readonly<Record<string, unknown>>[];
+  readonly verifiedAvailable: string;
+}
+
+export interface IssuerInstrumentPage {
+  readonly items: readonly Omit<IssuerInstrumentResult, 'collateralPositions'>[];
+  readonly page: {
+    readonly nextCursor?: string;
+    readonly limit: number;
+    readonly hasMore: boolean;
+  };
+}
+
+export interface CollateralSummaryResult {
+  readonly instrumentId: string;
+  readonly verifiedAvailable: string;
+  readonly positions: readonly Readonly<Record<string, unknown>>[];
 }

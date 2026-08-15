@@ -105,6 +105,140 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /instruments/issues:
+    get:
+      tags:
+        - Instruments
+      summary: List the authenticated issuer's instruments
+      operationId: listIssuerInstruments
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Cursor page of instruments owned by the issuer.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuerInstrumentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /instruments/{id}/draft:
+    patch:
+      tags:
+        - Instruments
+      summary: Save the current instrument draft
+      description: Replaces the editable draft content without creating a listing version.
+      operationId: updateInstrumentDraft
+      parameters:
+        - $ref: '#/components/parameters/InstrumentIdPath'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstrumentDraftUpdate'
+      responses:
+        '200':
+          description: Draft saved.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstrumentDraft'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /instruments/{id}/issue:
+    get:
+      tags:
+        - Instruments
+      summary: Get an issuer-owned instrument and its current passport
+      operationId: getIssuerInstrument
+      parameters:
+        - $ref: '#/components/parameters/InstrumentIdPath'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+      responses:
+        '200':
+          description: Private issuer instrument view.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuerInstrument'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /instruments/{id}/collateral:
+    get:
+      tags:
+        - Collateral
+      summary: Get verified collateral for an instrument
+      operationId: getInstrumentCollateral
+      parameters:
+        - $ref: '#/components/parameters/InstrumentIdPath'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/XActorId'
+      responses:
+        '200':
+          description: Verified collateral summary.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollateralSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /instruments/{id}/submit:
     post:
       tags:
@@ -1207,6 +1341,65 @@ components:
         extensions:
           $ref: '#/components/schemas/Extensions'
 
+    InstrumentDraftUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - type
+        - legalNature
+        - currency
+        - unit
+        - unitPerToken
+        - supplyCap
+        - passport
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        type:
+          $ref: '#/components/schemas/InstrumentType'
+        legalNature:
+          $ref: '#/components/schemas/InstrumentLegalNature'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        unit:
+          $ref: '#/components/schemas/UnitCode'
+        unitPerToken:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Commodity quantity per token as an integer string in the unit minor units.
+        supplyCap:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Maximum token supply as an integer string in indivisible token minor units.
+        passport:
+          $ref: '#/components/schemas/TokenPassportDraft'
+        extensions:
+          $ref: '#/components/schemas/Extensions'
+
+    AssetDocumentMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - size
+        - mediaType
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        size:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: File size as an integer string in bytes.
+        mediaType:
+          type: string
+          minLength: 1
+          maxLength: 128
+
     UnderlyingAssetPassport:
       type: object
       additionalProperties: false
@@ -1244,6 +1437,14 @@ components:
           type: string
           minLength: 1
           maxLength: 256
+        quantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Declared asset quantity as an integer string in commodity minor units.
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetDocumentMetadata'
 
     HolderRightsPassport:
       type: object
@@ -1349,6 +1550,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PassportFee'
+        collateralReserveBps:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Additional collateral reserve as an integer string in basis points.
 
     TradingParametersPassport:
       type: object
@@ -1428,6 +1633,92 @@ components:
           type: integer
           format: int64
           minimum: 1
+
+    IssuerInstrument:
+      type: object
+      additionalProperties: false
+      required:
+        - instrument
+        - passport
+        - version
+        - collateralPositions
+        - verifiedAvailable
+      properties:
+        instrument:
+          $ref: '#/components/schemas/Instrument'
+        passport:
+          $ref: '#/components/schemas/TokenPassportDraft'
+        passportHash:
+          $ref: '#/components/schemas/Hash'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        collateralPositions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollateralPosition'
+        verifiedAvailable:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Verified collateral as an integer string in commodity minor units.
+
+    IssuerInstrumentPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuerInstrumentSummary'
+        page:
+          $ref: '#/components/schemas/CursorPageMetadata'
+
+    IssuerInstrumentSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - instrument
+        - passport
+        - version
+        - verifiedAvailable
+      properties:
+        instrument:
+          $ref: '#/components/schemas/Instrument'
+        passport:
+          $ref: '#/components/schemas/TokenPassportDraft'
+        passportHash:
+          $ref: '#/components/schemas/Hash'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        verifiedAvailable:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Verified collateral as an integer string in commodity minor units.
+
+    CollateralSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - instrumentId
+        - verifiedAvailable
+        - positions
+      properties:
+        instrumentId:
+          $ref: '#/components/schemas/InstrumentId'
+        verifiedAvailable:
+          allOf:
+            - $ref: '#/components/schemas/NonNegativeIntegerString'
+          description: Verified collateral as an integer string in commodity minor units.
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollateralPosition'
 
     InstrumentSubmissionResult:
       type: object

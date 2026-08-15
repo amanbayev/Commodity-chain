@@ -46,6 +46,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instruments/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the authenticated issuer's instruments */
+        get: operations["listIssuerInstruments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/instruments/{id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Save the current instrument draft
+         * @description Replaces the editable draft content without creating a listing version.
+         */
+        patch: operations["updateInstrumentDraft"];
+        trace?: never;
+    };
+    "/instruments/{id}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an issuer-owned instrument and its current passport */
+        get: operations["getIssuerInstrument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/instruments/{id}/collateral": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get verified collateral for an instrument */
+        get: operations["getInstrumentCollateral"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instruments/{id}/submit": {
         parameters: {
             query?: never;
@@ -434,6 +505,26 @@ export interface components {
             passport: components["schemas"]["TokenPassportDraft"];
             extensions?: components["schemas"]["Extensions"];
         };
+        InstrumentDraftUpdate: {
+            /** Format: int64 */
+            version: number;
+            type: components["schemas"]["InstrumentType"];
+            legalNature: components["schemas"]["InstrumentLegalNature"];
+            currency: components["schemas"]["CurrencyCode"];
+            unit: components["schemas"]["UnitCode"];
+            /** @description Commodity quantity per token as an integer string in the unit minor units. */
+            unitPerToken: components["schemas"]["PositiveIntegerString"];
+            /** @description Maximum token supply as an integer string in indivisible token minor units. */
+            supplyCap: components["schemas"]["PositiveIntegerString"];
+            passport: components["schemas"]["TokenPassportDraft"];
+            extensions?: components["schemas"]["Extensions"];
+        };
+        AssetDocumentMetadata: {
+            name: string;
+            /** @description File size as an integer string in bytes. */
+            size: components["schemas"]["NonNegativeIntegerString"];
+            mediaType: string;
+        };
         UnderlyingAssetPassport: {
             assetClass: string;
             commodity: string;
@@ -442,6 +533,9 @@ export interface components {
             unit: components["schemas"]["UnitCode"];
             storageLocation: string;
             qualityStandard?: string;
+            /** @description Declared asset quantity as an integer string in commodity minor units. */
+            quantity?: components["schemas"]["PositiveIntegerString"];
+            documents?: components["schemas"]["AssetDocumentMetadata"][];
         };
         HolderRightsPassport: {
             legalTitle: components["schemas"]["InstrumentLegalNature"];
@@ -469,6 +563,8 @@ export interface components {
             /** Format: date */
             maturityDate: string;
             feeSchedule: components["schemas"]["PassportFee"][];
+            /** @description Additional collateral reserve as an integer string in basis points. */
+            collateralReserveBps?: components["schemas"]["NonNegativeIntegerString"];
         };
         TradingParametersPassport: {
             /** @description Price tick as an integer string in currency minor units per token. */
@@ -497,6 +593,35 @@ export interface components {
             passport: components["schemas"]["TokenPassportDraft"];
             /** Format: int64 */
             version: number;
+        };
+        IssuerInstrument: {
+            instrument: components["schemas"]["Instrument"];
+            passport: components["schemas"]["TokenPassportDraft"];
+            passportHash?: components["schemas"]["Hash"];
+            /** Format: int64 */
+            version: number;
+            collateralPositions: components["schemas"]["CollateralPosition"][];
+            /** @description Verified collateral as an integer string in commodity minor units. */
+            verifiedAvailable: components["schemas"]["NonNegativeIntegerString"];
+        };
+        IssuerInstrumentPage: {
+            items: components["schemas"]["IssuerInstrumentSummary"][];
+            page: components["schemas"]["CursorPageMetadata"];
+        };
+        IssuerInstrumentSummary: {
+            instrument: components["schemas"]["Instrument"];
+            passport: components["schemas"]["TokenPassportDraft"];
+            passportHash?: components["schemas"]["Hash"];
+            /** Format: int64 */
+            version: number;
+            /** @description Verified collateral as an integer string in commodity minor units. */
+            verifiedAvailable: components["schemas"]["NonNegativeIntegerString"];
+        };
+        CollateralSummary: {
+            instrumentId: components["schemas"]["InstrumentId"];
+            /** @description Verified collateral as an integer string in commodity minor units. */
+            verifiedAvailable: components["schemas"]["NonNegativeIntegerString"];
+            positions: components["schemas"]["CollateralPosition"][];
         };
         InstrumentSubmissionResult: {
             instrument: components["schemas"]["Instrument"];
@@ -1065,6 +1190,149 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listIssuerInstruments: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor returned by the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Maximum number of audit events to return. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cursor page of instruments owned by the issuer. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerInstrumentPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    updateInstrumentDraft: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+            };
+            path: {
+                /** @description Instrument identifier. */
+                id: components["parameters"]["InstrumentIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstrumentDraftUpdate"];
+            };
+        };
+        responses: {
+            /** @description Draft saved. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstrumentDraft"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getIssuerInstrument: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+            };
+            path: {
+                /** @description Instrument identifier. */
+                id: components["parameters"]["InstrumentIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Private issuer instrument view. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerInstrument"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getInstrumentCollateral: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Caller-supplied correlation identifier propagated to every response and event. */
+                "X-Correlation-Id": components["parameters"]["XCorrelationId"];
+                /** @description Authenticated actor identifier recorded in the immutable audit trail. */
+                "X-Actor-Id": components["parameters"]["XActorId"];
+            };
+            path: {
+                /** @description Instrument identifier. */
+                id: components["parameters"]["InstrumentIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified collateral summary. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollateralSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };
     };

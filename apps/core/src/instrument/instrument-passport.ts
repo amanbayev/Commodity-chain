@@ -20,6 +20,14 @@ export interface UnderlyingAssetPassport {
   readonly unit: string;
   readonly storageLocation: string;
   readonly qualityStandard?: string;
+  readonly quantity?: bigint;
+  readonly documents?: readonly AssetDocumentMetadata[];
+}
+
+export interface AssetDocumentMetadata {
+  readonly name: string;
+  readonly size: bigint;
+  readonly mediaType: string;
 }
 
 export interface HolderRightsPassport {
@@ -48,6 +56,7 @@ export interface InstrumentEconomicsPassport {
   readonly issueCurrency: string;
   readonly maturityDate: string;
   readonly feeSchedule: readonly PassportFee[];
+  readonly collateralReserveBps?: bigint;
 }
 
 export interface TradingParametersPassport {
@@ -172,7 +181,22 @@ export function passportToJson(passport: PassportDraft): Readonly<Record<string,
   return {
     ...(passport.underlyingAsset === undefined
       ? {}
-      : { underlyingAsset: { ...passport.underlyingAsset } }),
+      : {
+          underlyingAsset: {
+            ...passport.underlyingAsset,
+            ...(passport.underlyingAsset.quantity === undefined
+              ? {}
+              : { quantity: passport.underlyingAsset.quantity.toString() }),
+            ...(passport.underlyingAsset.documents === undefined
+              ? {}
+              : {
+                  documents: passport.underlyingAsset.documents.map((document) => ({
+                    ...document,
+                    size: document.size.toString(),
+                  })),
+                }),
+          },
+        }),
     ...(passport.holderRights === undefined
       ? {}
       : {
@@ -208,6 +232,9 @@ export function passportToJson(passport: PassportDraft): Readonly<Record<string,
               amount: fee.amount.toString(),
               currency: fee.currency,
             })),
+            ...(passport.economics.collateralReserveBps === undefined
+              ? {}
+              : { collateralReserveBps: passport.economics.collateralReserveBps.toString() }),
           },
         }),
     ...(passport.tradingParameters === undefined
@@ -285,6 +312,8 @@ function parseUnderlying(value: unknown): UnderlyingAssetPassport | null | undef
       'unit',
       'storageLocation',
       'qualityStandard',
+      'quantity',
+      'documents',
     ]) ||
     !stringsPresent(value, [
       'assetClass',
@@ -294,10 +323,14 @@ function parseUnderlying(value: unknown): UnderlyingAssetPassport | null | undef
       'unit',
       'storageLocation',
     ]) ||
-    (value['qualityStandard'] !== undefined && !isNonBlankString(value['qualityStandard']))
+    (value['qualityStandard'] !== undefined && !isNonBlankString(value['qualityStandard'])) ||
+    (value['quantity'] !== undefined && !isPositiveIntegerString(value['quantity'])) ||
+    (value['documents'] !== undefined && !Array.isArray(value['documents']))
   ) {
     return null;
   }
+  const documents = (value['documents'] as unknown[] | undefined)?.map(parseDocument);
+  if (documents?.some((document) => document === null) === true) return null;
   return {
     assetClass: value['assetClass'] as string,
     commodity: value['commodity'] as string,
@@ -308,6 +341,24 @@ function parseUnderlying(value: unknown): UnderlyingAssetPassport | null | undef
     ...(value['qualityStandard'] === undefined
       ? {}
       : { qualityStandard: value['qualityStandard'] }),
+    ...(value['quantity'] === undefined ? {} : { quantity: BigInt(value['quantity']) }),
+    ...(documents === undefined ? {} : { documents: documents as AssetDocumentMetadata[] }),
+  };
+}
+
+function parseDocument(value: unknown): AssetDocumentMetadata | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ['name', 'size', 'mediaType']) ||
+    !stringsPresent(value, ['name', 'mediaType']) ||
+    !isNonNegativeIntegerString(value['size'])
+  ) {
+    return null;
+  }
+  return {
+    name: value['name'] as string,
+    size: BigInt(value['size']),
+    mediaType: value['mediaType'] as string,
   };
 }
 
@@ -365,11 +416,19 @@ function parseEconomics(value: unknown): InstrumentEconomicsPassport | null | un
   if (value === undefined) return undefined;
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ['issuePrice', 'issueCurrency', 'maturityDate', 'feeSchedule']) ||
+    !hasOnlyKeys(value, [
+      'issuePrice',
+      'issueCurrency',
+      'maturityDate',
+      'feeSchedule',
+      'collateralReserveBps',
+    ]) ||
     !isPositiveIntegerString(value['issuePrice']) ||
     !isNonBlankString(value['issueCurrency']) ||
     !isNonBlankString(value['maturityDate']) ||
-    !Array.isArray(value['feeSchedule'])
+    !Array.isArray(value['feeSchedule']) ||
+    (value['collateralReserveBps'] !== undefined &&
+      !isNonNegativeIntegerString(value['collateralReserveBps']))
   ) {
     return null;
   }
@@ -380,6 +439,9 @@ function parseEconomics(value: unknown): InstrumentEconomicsPassport | null | un
     issueCurrency: value['issueCurrency'] as string,
     maturityDate: value['maturityDate'] as string,
     feeSchedule: fees as PassportFee[],
+    ...(value['collateralReserveBps'] === undefined
+      ? {}
+      : { collateralReserveBps: BigInt(value['collateralReserveBps']) }),
   };
 }
 
