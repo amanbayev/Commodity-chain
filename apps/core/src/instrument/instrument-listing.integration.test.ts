@@ -309,6 +309,7 @@ function completePassport(overrides: { readonly claimDescription?: string } = {}
       tickSize: 1n,
       lotSize: 1n,
       minimumOrderQuantity: 1n,
+      minimumDeliveryQuantity: 1n,
       settlementCycle: 'T_PLUS_1',
     },
   };

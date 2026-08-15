@@ -420,6 +420,13 @@ paths:
       parameters:
         - $ref: '#/components/parameters/XCorrelationId'
         - $ref: '#/components/parameters/IdempotencyKey'
+        - name: X-Holder-Id
+          in: header
+          required: true
+          description: UUID of the authenticated holder submitting the redemption.
+          schema:
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -448,6 +455,52 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /redemptions/{id}:
+    delete:
+      tags:
+        - Redemptions
+      summary: Cancel a redemption before physical dispatch
+      description: |
+        Cancels a CREATED or TOKENS_LOCKED redemption and atomically releases the
+        holder's reserved tokens. Repeating the cancellation returns the same result.
+      operationId: cancelRedemption
+      parameters:
+        - $ref: '#/components/parameters/XCorrelationId'
+        - name: X-Holder-Id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Redemption cancelled, or the original cancelled result replayed.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RedemptionOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -1189,6 +1242,7 @@ components:
         - tickSize
         - lotSize
         - minimumOrderQuantity
+        - minimumDeliveryQuantity
         - settlementCycle
       properties:
         tickSize:
@@ -1203,6 +1257,10 @@ components:
           allOf:
             - $ref: '#/components/schemas/PositiveIntegerString'
           description: Minimum order quantity as an integer string in token minor units.
+        minimumDeliveryQuantity:
+          allOf:
+            - $ref: '#/components/schemas/PositiveIntegerString'
+          description: Minimum physical-delivery lot as an integer string in token minor units.
         settlementCycle:
           type: string
           enum:
@@ -1580,6 +1638,10 @@ components:
           format: date-time
         sourceId:
           $ref: '#/components/schemas/ExternalId'
+        redemptionId:
+          allOf:
+            - $ref: '#/components/schemas/ExternalId'
+          description: Redemption identifier. Present only for GOODS_RELEASED events.
         evidenceHash:
           $ref: '#/components/schemas/Hash'
         nonce:
@@ -1972,14 +2034,35 @@ components:
     RedemptionStatus:
       type: string
       enum:
-        - REQUESTED
-        - VALIDATING
-        - APPROVED
-        - IN_PROGRESS
-        - FULFILLED
-        - REJECTED
+        - CREATED
+        - TOKENS_LOCKED
+        - IN_DELIVERY
+        - COMPLETED
         - CANCELLED
-        - FAILED
+        - EXCEPTION
+        - QUARANTINED
+    PhysicalDeliveryDetails:
+      type: object
+      additionalProperties: false
+      required:
+        - elevatorId
+        - requestedDate
+        - recipient
+        - transport
+      properties:
+        elevatorId:
+          $ref: '#/components/schemas/ExternalId'
+        requestedDate:
+          type: string
+          format: date
+        recipient:
+          type: string
+          minLength: 1
+          maxLength: 256
+        transport:
+          type: string
+          minLength: 1
+          maxLength: 512
     RedemptionCreateRequest:
       type: object
       additionalProperties: false
@@ -1988,6 +2071,7 @@ components:
         - instrumentId
         - quantity
         - method
+        - delivery
         - proofs
       properties:
         holder:
@@ -2002,6 +2086,8 @@ components:
           description: Redemption quantity as an integer string in indivisible token minor units.
         method:
           $ref: '#/components/schemas/RedemptionMethod'
+        delivery:
+          $ref: '#/components/schemas/PhysicalDeliveryDetails'
         proofs:
           type: array
           items:
@@ -2019,6 +2105,7 @@ components:
         - quantity
         - method
         - status
+        - delivery
         - proofs
         - createdAt
         - updatedAt
@@ -2040,6 +2127,8 @@ components:
           $ref: '#/components/schemas/RedemptionMethod'
         status:
           $ref: '#/components/schemas/RedemptionStatus'
+        delivery:
+          $ref: '#/components/schemas/PhysicalDeliveryDetails'
         proofs:
           type: array
           items:
@@ -2048,6 +2137,12 @@ components:
           type: string
           format: date-time
         updatedAt:
+          type: string
+          format: date-time
+        deliveryDeadline:
+          type: string
+          format: date-time
+        completedAt:
           type: string
           format: date-time
         extensions:
@@ -2273,6 +2368,10 @@ components:
         - ORDER_REJECTED
         - ORDER_NOT_CANCELLABLE
         - REDEMPTION_NOT_ALLOWED
+        - REDEMPTION_LOT_INVALID
+        - REDEMPTION_NOT_CANCELLABLE
+        - REDEMPTION_QUANTITY_MISMATCH
+        - REDEMPTION_DELIVERY_EXCEPTION
         - INCOME_PROOF_INVALID
         - RATE_LIMITED
         - INTERNAL_ERROR

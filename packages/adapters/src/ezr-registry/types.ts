@@ -69,6 +69,7 @@ export interface UnsignedOracleEventEnvelope {
   readonly observedAt: string;
   readonly effectiveAt: string;
   readonly sourceId: string;
+  readonly redemptionId?: string;
   readonly evidenceHash: string;
   readonly nonce: number;
   readonly extensions?: Readonly<Record<string, unknown>>;

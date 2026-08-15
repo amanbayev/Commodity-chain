@@ -8,7 +8,8 @@
     "src/**/*.ts",
     "../../packages/adapters/src/**/*.ts",
     "../../ops/reconcile-supply.ts",
-    "../../ops/reconcile-settlements.ts"
+    "../../ops/reconcile-settlements.ts",
+    "../../ops/process-redemption-timeouts.ts"
   ],
   "exclude": []
 }

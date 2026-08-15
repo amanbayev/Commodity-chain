@@ -250,7 +250,8 @@ class PostgresOracleEventTransaction implements OracleEventTransaction {
           evidence_hash = $12,
           nonce = $13,
           signature = $14::jsonb,
-          extensions = $15::jsonb
+          extensions = $15::jsonb,
+          redemption_id = $16
         WHERE id = $1
       `,
       [
@@ -269,6 +270,7 @@ class PostgresOracleEventTransaction implements OracleEventTransaction {
         envelope.nonce.toString(),
         JSON.stringify(envelope.signature),
         JSON.stringify(envelope.extensions ?? {}),
+        envelope.redemptionId ?? null,
       ],
     );
   }
@@ -351,6 +353,7 @@ class PostgresOracleEventTransaction implements OracleEventTransaction {
       effectiveAt: envelope.effectiveAt,
       evidenceHash: envelope.evidenceHash,
       nonce: envelope.nonce,
+      ...(envelope.redemptionId === undefined ? {} : { redemptionId: envelope.redemptionId }),
       correlationId,
     };
 

@@ -79,6 +79,7 @@ function completePassportJson(): Record<string, unknown> {
       tickSize: '1',
       lotSize: '1',
       minimumOrderQuantity: '1',
+      minimumDeliveryQuantity: '1',
       settlementCycle: 'T_PLUS_1',
     },
   };

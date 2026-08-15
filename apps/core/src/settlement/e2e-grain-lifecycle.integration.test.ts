@@ -16,6 +16,7 @@ import { MintService } from '../instrument/mint.service.js';
 import { InstrumentCommandQueue } from '../oms/instrument-command-queue.js';
 import { OmsService } from '../oms/oms.service.js';
 import type { OrderView, PlaceOrderCommand } from '../oms/oms.types.js';
+import { RedemptionService } from '../redemption/redemption.service.js';
 import { SettlementCreatedConsumer } from './settlement-created.consumer.js';
 import { SettlementService } from './settlement.service.js';
 import type { SettlementCreatedDomainEvent } from './settlement.types.js';
@@ -31,6 +32,8 @@ describeWithDatabase('e2e-grain-lifecycle', () => {
   beforeEach(async () => {
     await pool.query(`
       TRUNCATE
+        redemption_transitions,
+        redemption_orders,
         settlement_transitions,
         settlement_account_snapshots,
         settlement_system_accounts,
@@ -50,6 +53,9 @@ describeWithDatabase('e2e-grain-lifecycle', () => {
         instrument_passport_versions,
         collateral_position_movements,
         collateral_position,
+        mock_ezr_http_outbox,
+        mock_ezr_source_counters,
+        mock_ezr_receipts,
         oracle_events,
         outbox,
         event_log,
@@ -98,7 +104,7 @@ describeWithDatabase('e2e-grain-lifecycle', () => {
       correlationId: randomUUID(),
     });
 
-    const assetId = `grain-${randomUUID()}`;
+    const assetId = randomUUID();
     await pool.query(
       `INSERT INTO asset (
          asset_id, class, owner_party_id, quantity, unit, location, encumbrance_status
@@ -184,6 +190,7 @@ describeWithDatabase('e2e-grain-lifecycle', () => {
     const buyerCash = await openCash(buyerId, 'AVAILABLE');
     await openCash(buyerId, 'RESERVED');
     const buyerTokens = await openToken(buyerId, instrumentId, 'AVAILABLE');
+    const buyerReservedTokens = await openToken(buyerId, instrumentId, 'RESERVED');
     const sellerCash = await openCash(sellerId, 'AVAILABLE');
     const sellerTokens = await openToken(sellerId, instrumentId, 'AVAILABLE');
     await openToken(sellerId, instrumentId, 'RESERVED');
@@ -248,11 +255,11 @@ describeWithDatabase('e2e-grain-lifecycle', () => {
     expect(settlementReport.consistent).toBe(true);
     expect(supplyReport.consistent).toBe(true);
     expect(await instrumentStatus(instrumentId)).toBe('PRIMARY');
-    expect(await ledger.balanceOf(buyerTokens)).toBe(50n);
-    expect(await ledger.balanceOf(sellerTokens)).toBe(50n);
-    expect(await ledger.balanceOf(sellerCash)).toBe(4_997n);
-    expect(await ledger.balanceOf(feeAccount)).toBe(7n);
-    expect(await ledger.balanceOf(residualAccount)).toBe(1n);
+    expect(await ledger.balanceOf(buyerTokens)).toBe(100n);
+    expect(await ledger.balanceOf(sellerTokens)).toBe(0n);
+    expect(await ledger.balanceOf(sellerCash)).toBe(9_995n);
+    expect(await ledger.balanceOf(feeAccount)).toBe(15n);
+    expect(await ledger.balanceOf(residualAccount)).toBe(0n);
     expect((await ledger.trialBalance()).balanced).toBe(true);
     const final = await pool.query<{
       status: string;
@@ -273,6 +280,76 @@ describeWithDatabase('e2e-grain-lifecycle', () => {
     );
     expect(final.rows[0]).toMatchObject({ status: 'RECONCILED', supply: '100', collateral: '100' });
     expect(BigInt(final.rows[0]?.events ?? '0')).toBeGreaterThan(0n);
+
+    await listing.transition({
+      instrumentId,
+      targetStatus: 'ACTIVE',
+      actorId: 'listing-operator-a',
+      reason: 'Secondary trading and redemption opened after settlement',
+      correlationId: randomUUID(),
+    });
+    await pool.query(
+      `INSERT INTO mock_ezr_receipts (
+         receipt_id, owner, commodity, quantity, unit, elevator_id, status, instrument_id
+       ) VALUES ($1, $2, 'WHEAT', 100, 'GRAM', 'ELEVATOR-E2E', 'LOCKED', $3)`,
+      [assetId, sellerId, instrumentId],
+    );
+    const redemptions = new RedemptionService(pool, ledger, collateral);
+    const redemption = await redemptions.create({
+      holderId: buyerId,
+      instrumentId,
+      quantity: 100n,
+      method: 'PHYSICAL_DELIVERY',
+      delivery: {
+        elevatorId: 'ELEVATOR-E2E',
+        requestedDate: '2026-08-20',
+        recipient: 'E2E buyer',
+        transport: 'E2E truck',
+      },
+      proofs: [],
+      idempotencyKey: `e2e-redemption-${randomUUID()}`,
+      correlationId: randomUUID(),
+    });
+    if ('code' in redemption.body) throw new Error(redemption.body.message);
+    await redemptions.prepareDelivery(redemption.body.id, randomUUID());
+    const releaseEventId = randomUUID();
+    const releaseCorrelationId = randomUUID();
+    await pool.query(
+      `INSERT INTO oracle_events (
+         source_id, event_id, schema_version, instrument_id, asset_id, event_type,
+         quantity, unit, observed_at, effective_at, evidence_hash, nonce, signature,
+         status, correlation_id, raw_payload, http_status, response_body, applied_at,
+         redemption_id
+       ) VALUES (
+         'e2e-ezr', $1, '1', $2, $3, 'GOODS_RELEASED', 100, 'GRAM', now(), now(),
+         'sha256:e2e-release', 2, '{}'::jsonb, 'APPLIED', $4, '{}'::jsonb, 202,
+         '{}'::jsonb, now(), $5
+       )`,
+      [releaseEventId, instrumentId, assetId, releaseCorrelationId, redemption.body.id],
+    );
+    const completed = await redemptions.applyGoodsReleased({
+      eventId: releaseEventId,
+      instrumentId,
+      assetId,
+      eventType: 'GOODS_RELEASED',
+      quantity: '100',
+      redemptionId: redemption.body.id,
+      correlationId: releaseCorrelationId,
+    });
+    expect(completed.status).toBe('COMPLETED');
+    expect(await ledger.balanceOf(buyerTokens)).toBe(0n);
+    expect(await ledger.balanceOf(buyerReservedTokens)).toBe(0n);
+    const redeemed = await pool.query<{ supply: string; collateral: string }>(
+      `SELECT instrument.circulating_supply::text AS supply,
+              position.reserved::text AS collateral
+       FROM instrument
+       JOIN collateral_position AS position ON position.instrument_id = instrument.id
+       WHERE instrument.id = $1`,
+      [instrumentId],
+    );
+    expect(redeemed.rows[0]).toEqual({ supply: '0', collateral: '0' });
+    expect((await reconcileSupply(pool)).consistent).toBe(true);
+    expect((await ledger.trialBalance()).balanced).toBe(true);
   });
 
   async function insertParties(ids: readonly string[]): Promise<void> {
@@ -369,6 +446,7 @@ function completePassport(): PassportDraft {
       tickSize: 10n,
       lotSize: 10n,
       minimumOrderQuantity: 10n,
+      minimumDeliveryQuantity: 10n,
       settlementCycle: 'T_PLUS_0',
     },
   };
@@ -387,7 +465,7 @@ function order(
     side,
     type: 'LIMIT',
     price: 100n,
-    quantity: 50n,
+    quantity: 100n,
     idempotencyKey: `e2e-${clientOrderId}-${randomUUID()}`,
     correlationId: randomUUID(),
   };

@@ -15,6 +15,7 @@ export class AppliedOracleEventConsumer {
         await this.collateral.reserve(event.assetId, event.instrumentId, quantity, event.eventId);
         return;
       case 'GOODS_RELEASED':
+        if (event.redemptionId !== undefined) return;
         await this.collateral.release(event.assetId, event.instrumentId, quantity, event.eventId);
         return;
       default:

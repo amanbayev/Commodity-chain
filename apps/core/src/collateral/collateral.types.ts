@@ -31,4 +31,5 @@ export interface OracleAppliedDomainEvent {
   readonly assetId: string;
   readonly eventType: string;
   readonly quantity: string;
+  readonly redemptionId?: string;
 }

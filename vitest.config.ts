@@ -5,6 +5,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     alias: {
+      '@commodity-chain/adapters': fileURLToPath(
+        new URL('./packages/adapters/src/index.ts', import.meta.url),
+      ),
       '@commodity-chain/ledger': fileURLToPath(
         new URL('./packages/ledger/src/index.ts', import.meta.url),
       ),
